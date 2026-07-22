@@ -1,0 +1,6 @@
+{
+  "name": "Grupo Más Digital - Control de Inventario",
+  "description": "Sistema de gestión de inventario, entradas, salidas, alertas de stock bajo y reportes en tiempo real para Grupo Más Digital.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Catalog item in inventory",
+      "type": "object",
+      "properties": {
+        "sku": {
+          "type": "string"
+        },
+        "descripcion": {
+          "type": "string"
+        },
+        "categoria": {
+          "type": "string"
+        },
+        "cantidadActual": {
+          "type": "number"
+        },
+        "minStock": {
+          "type": "number"
+        },
+        "costo": {
+          "type": "number"
+        },
+        "precio": {
+          "type": "number"
+        },
+        "ubicacionAlmacen": {
+          "type": "string"
+        },
+        "unidadMedida": {
+          "type": "string"
+        }
+      }
+    },
+    "InventoryMovement": {
+      "title": "InventoryMovement",
+      "description": "In/Out inventory transaction log",
+      "type": "object",
+      "properties": {
+        "productId": {
+          "type": "string"
+        },
+        "sku": {
+          "type": "string"
+        },
+        "tipo": {
+          "type": "string"
+        },
+        "cantidad": {
+          "type": "number"
+        },
+        "stockAnterior": {
+          "type": "number"
+        },
+        "stockNuevo": {
+          "type": "number"
+        },
+        "usuarioEmail": {
+          "type": "string"
+        }
+      }
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Purchase order for low stock materials",
+      "type": "object",
+      "properties": {
+        "folio": {
+          "type": "string"
+        },
+        "estado": {
+          "type": "string"
+        },
+        "totalEstimado": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Products inventory collection"
+    },
+    "/inventory_movements/{movementId}": {
+      "schema": "InventoryMovement",
+      "description": "Log of stock ins and outs"
+    },
+    "/purchase_orders/{orderId}": {
+      "schema": "PurchaseOrder",
+      "description": "Purchase orders for low stock items"
+    }
+  }
+}
