@@ -23,19 +23,36 @@ import {
 } from 'firebase/auth';
 import configData from '../../firebase-applet-config.json';
 
+// Support both firebase-applet-config.json AND VITE_ env variables for Netlify/GitHub deployments
 const firebaseConfig = {
-  apiKey: configData.apiKey,
-  authDomain: configData.authDomain,
-  projectId: configData.projectId,
-  storageBucket: configData.storageBucket,
-  messagingSenderId: configData.messagingSenderId,
-  appId: configData.appId,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || configData?.apiKey || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || configData?.authDomain || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || configData?.projectId || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || configData?.storageBucket || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || configData?.messagingSenderId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || configData?.appId || '',
 };
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || configData?.firestoreDatabaseId || undefined;
+
+let app;
+try {
+  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+} catch (error) {
+  console.warn("Firebase initialization warning (using fallback instance):", error);
+  // Fallback instance if keys are missing in build environment
+  app = getApps().length > 0 ? getApp() : initializeApp({
+    apiKey: "AIzaSyDummyKeyForFallbackDeployment",
+    authDomain: "gen-lang-client-0441062211.firebaseapp.com",
+    projectId: "gen-lang-client-0441062211",
+    storageBucket: "gen-lang-client-0441062211.firebasestorage.app",
+    messagingSenderId: "400384370097",
+    appId: "1:400384370097:web:a1cad17aa484acf1934990"
+  });
+}
 
 // Initialize Firestore with custom database ID if specified
-export const db = getFirestore(app, configData.firestoreDatabaseId || undefined);
+export const db = getFirestore(app, databaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
