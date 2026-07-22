@@ -39,17 +39,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           
           {/* Logo & Brand */}
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20">
-              <Boxes className="w-6 h-6 text-white" />
-            </div>
+          <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setActiveTab('dashboard')}>
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
                   GRUPO MÁS DIGITAL
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30">
-                  INVENTARIO EN TIEMPO REAL
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hidden sm:inline-block">
+                  SISTEMA DE INVENTARIO
                 </span>
               </div>
               <p className="text-xs text-slate-400 hidden sm:block">Control Interno de Entradas, Salidas y Material Faltante</p>
