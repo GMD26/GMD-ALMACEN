@@ -10,7 +10,12 @@ import {
   User as UserIcon,
   CheckCircle2,
   Receipt,
-  Home
+  Home,
+  Lock,
+  ShoppingBag,
+  UserCheck,
+  Tag,
+  ShoppingCart
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
@@ -105,91 +110,130 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Portada Principal */}
           <button
             onClick={() => setActiveTab('portada')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'portada'
                 ? 'bg-slate-700 text-white font-black ring-1 ring-slate-500'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Home className="w-4 h-4 text-cyan-400" />
-            <span>Portada Principal</span>
+            <Home className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Portada</span>
           </button>
 
-          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+          <div className="h-4 w-px bg-slate-800 self-center mx-1" />
 
           {/* Botón Remisión Directo */}
           <button
             onClick={() => setActiveTab('remisiones')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'remisiones'
                 ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
                 : 'text-emerald-400 hover:bg-slate-800 hover:text-emerald-300 font-bold'
             }`}
           >
-            <Receipt className="w-4 h-4" />
+            <Receipt className="w-3.5 h-3.5" />
             <span>Remisión</span>
           </button>
 
-          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+          <div className="h-4 w-px bg-slate-800 self-center mx-1" />
 
           {/* Sección Control de Inventario GMD 26 */}
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'dashboard'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Resumen GMD 26</span>
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Resumen</span>
           </button>
 
           <button
             onClick={() => setActiveTab('inventory')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'inventory'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Boxes className="w-4 h-4" />
-            <span>Inventario SKUs</span>
+            <Boxes className="w-3.5 h-3.5" />
+            <span>SKUs</span>
+          </button>
+
+          {/* Existencias Disponibles (Neto + Apartados) */}
+          <button
+            onClick={() => setActiveTab('existencias')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'existencias'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-400/20'
+                : 'text-amber-300 hover:bg-slate-800 hover:text-amber-200'
+            }`}
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span>Existencias Disponibles</span>
           </button>
 
           <button
             onClick={() => setActiveTab('entradas')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'entradas'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <ArrowDownToLine className="w-4 h-4" />
+            <ArrowDownToLine className="w-3.5 h-3.5" />
             <span>Entradas</span>
           </button>
 
           <button
             onClick={() => setActiveTab('salidas')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'salidas'
                 ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <ArrowUpFromLine className="w-4 h-4" />
+            <ArrowUpFromLine className="w-3.5 h-3.5" />
             <span>Salidas</span>
+          </button>
+
+          {/* Pedidos Especiales */}
+          <button
+            onClick={() => setActiveTab('pedidos-especiales')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'pedidos-especiales'
+                ? 'bg-cyan-400 text-slate-950 font-black shadow-md shadow-cyan-400/20'
+                : 'text-cyan-300 hover:bg-slate-800 hover:text-cyan-200'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Pedidos Especiales</span>
+          </button>
+
+          {/* Mercado Libre */}
+          <button
+            onClick={() => setActiveTab('pedidos-ml')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'pedidos-ml'
+                ? 'bg-yellow-400 text-slate-950 font-black shadow-md shadow-yellow-400/20'
+                : 'text-yellow-300 hover:bg-slate-800 hover:text-yellow-200'
+            }`}
+          >
+            <ShoppingCart className="w-3.5 h-3.5" />
+            <span>Mercado Libre</span>
           </button>
 
           <button
             onClick={() => setActiveTab('pedidos')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative ${
               activeTab === 'pedidos'
                 ? 'bg-red-500 text-white font-bold shadow-md shadow-red-500/20'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-3.5 h-3.5" />
             <span>Pedidos Material</span>
             {lowStockCount > 0 && (
               <span className="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold bg-white text-red-600 rounded-full animate-pulse">
@@ -198,15 +242,41 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
+          {/* Reporte por Vendedor */}
+          <button
+            onClick={() => setActiveTab('reportes-vendedor')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'reportes-vendedor'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Reporte Vendedor</span>
+          </button>
+
+          {/* Listas de Precios */}
+          <button
+            onClick={() => setActiveTab('listas-precios')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'listas-precios'
+                ? 'bg-purple-500 text-white font-bold shadow-md shadow-purple-500/20'
+                : 'text-purple-300 hover:bg-slate-800 hover:text-purple-200'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>Listas de Precios</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('reportes')}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === 'reportes'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4" />
+            <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Reportes e Historial</span>
           </button>
         </nav>

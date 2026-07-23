@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowDownToLine, CheckCircle, PackagePlus, Search, Building2, FileText, MapPin } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle, PackagePlus, Search, Building2, FileText, MapPin, Trash2 } from 'lucide-react';
 import { Product, InventoryMovement } from '../types';
 
 interface StockInViewProps {
@@ -14,13 +14,15 @@ interface StockInViewProps {
     cost?: number
   ) => Promise<void>;
   movements: InventoryMovement[];
+  onDeleteMovements?: (ids: string[]) => Promise<void>;
 }
 
 export const StockInView: React.FC<StockInViewProps> = ({
   products,
   initialProduct,
   onRecordStockIn,
-  movements
+  movements,
+  onDeleteMovements
 }) => {
   const [selectedSku, setSelectedSku] = useState<string>(initialProduct?.sku || '');
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +33,9 @@ export const StockInView: React.FC<StockInViewProps> = ({
   const [notes, setNotes] = useState('Recepción de orden de compra programada.');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Checkbox Selection State for Deleting
+  const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
 
   const selectedProduct = products.find(p => p.sku === selectedSku);
 
@@ -87,6 +92,30 @@ export const StockInView: React.FC<StockInViewProps> = ({
   };
 
   const stockInMovements = movements.filter(m => m.tipo === 'ENTRADA');
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedMovementIds(stockInMovements.map(m => m.id));
+    } else {
+      setSelectedMovementIds([]);
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedMovementIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedMovementIds.length === 0 || !onDeleteMovements) return;
+    if (confirm(`¿Confirma eliminar ${selectedMovementIds.length} registro(s) de entrada seleccionados?`)) {
+      await onDeleteMovements(selectedMovementIds);
+      setSelectedMovementIds([]);
+      setSuccessMessage(`Se eliminaron ${selectedMovementIds.length} entrada(s) de almacén.`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -250,15 +279,36 @@ export const StockInView: React.FC<StockInViewProps> = ({
 
         {/* History Table Column (2 cols) */}
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <h2 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-2 flex items-center justify-between">
-            <span>Historial de Entradas Recientes</span>
-            <span className="text-xs text-slate-500 font-normal">{stockInMovements.length} registros total</span>
-          </h2>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h2 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <span>Historial de Entradas Recientes</span>
+              <span className="text-xs text-slate-500 font-normal">({stockInMovements.length} total)</span>
+            </h2>
+
+            {/* Delete Selected Button */}
+            {selectedMovementIds.length > 0 && onDeleteMovements && (
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center space-x-1.5 px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg shadow transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Eliminar Seleccionadas ({selectedMovementIds.length})</span>
+              </button>
+            )}
+          </div>
 
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold sticky top-0">
                 <tr>
+                  <th className="py-2.5 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={stockInMovements.length > 0 && selectedMovementIds.length === stockInMovements.length}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                  </th>
                   <th className="py-2.5 px-3">Fecha y Hora</th>
                   <th className="py-2.5 px-3">SKU</th>
                   <th className="py-2.5 px-3">Cant.</th>
@@ -270,33 +320,44 @@ export const StockInView: React.FC<StockInViewProps> = ({
               <tbody className="divide-y divide-slate-100 font-medium">
                 {stockInMovements.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-slate-400">
+                    <td colSpan={7} className="text-center py-10 text-slate-400">
                       No hay entradas de almacén registradas recientemente.
                     </td>
                   </tr>
                 ) : (
-                  stockInMovements.map((m) => (
-                    <tr key={m.id} className="hover:bg-emerald-50/40 transition-colors">
-                      <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                        {new Date(m.timestamp).toLocaleString('es-MX')}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">
-                        {m.sku}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-emerald-600">
-                        +{m.cantidad}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-700">
-                        {m.stockNuevo}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 max-w-[150px] truncate" title={m.referencia}>
-                        {m.referencia}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500 text-[11px] truncate max-w-[120px]">
-                        {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}
-                      </td>
-                    </tr>
-                  ))
+                  stockInMovements.map((m) => {
+                    const isSelected = selectedMovementIds.includes(m.id);
+                    return (
+                      <tr key={m.id} className={`transition-colors ${isSelected ? 'bg-emerald-100/70' : 'hover:bg-emerald-50/40'}`}>
+                        <td className="py-2.5 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(m.id)}
+                            className="rounded text-emerald-600 focus:ring-emerald-500"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                          {new Date(m.timestamp).toLocaleString('es-MX')}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">
+                          {m.sku}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-emerald-600">
+                          +{m.cantidad}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-700">
+                          {m.stockNuevo}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 max-w-[150px] truncate" title={m.referencia}>
+                          {m.referencia}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 text-[11px] truncate max-w-[120px]">
+                          {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

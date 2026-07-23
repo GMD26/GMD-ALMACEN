@@ -20,7 +20,19 @@ import {
   OperationType
 } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { Product, InventoryMovement, PurchaseOrder, UserProfile, ActiveTab, Customer, Remision } from './types';
+import { 
+  Product, 
+  InventoryMovement, 
+  PurchaseOrder, 
+  UserProfile, 
+  ActiveTab, 
+  Customer, 
+  Remision,
+  Apartado,
+  PedidoEspecial,
+  PrecioListaItem,
+  PedidoMercadoLibre
+} from './types';
 import { INITIAL_PRODUCTS } from './data/initialCatalog';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
@@ -32,6 +44,11 @@ import { ReportsView } from './components/ReportsView';
 import { AuthModal } from './components/AuthModal';
 import { Portada } from './components/Portada';
 import { RemisionView } from './components/RemisionView';
+import { ExistenciasDisponiblesView } from './components/ExistenciasDisponiblesView';
+import { PedidosEspecialesView } from './components/PedidosEspecialesView';
+import { ReporteVendedorView } from './components/ReporteVendedorView';
+import { ListasPreciosView } from './components/ListasPreciosView';
+import { PedidosMercadoLibreView } from './components/PedidosMercadoLibreView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('portada');
@@ -40,6 +57,10 @@ export default function App() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [remisiones, setRemisiones] = useState<Remision[]>([]);
+  const [apartados, setApartados] = useState<Apartado[]>([]);
+  const [pedidosEspeciales, setPedidosEspeciales] = useState<PedidoEspecial[]>([]);
+  const [listasPrecios, setListasPrecios] = useState<PrecioListaItem[]>([]);
+  const [pedidosML, setPedidosML] = useState<PedidoMercadoLibre[]>([]);
   
   // Auth state
   const [user, setUser] = useState<User | null>(null);
@@ -92,7 +113,6 @@ export default function App() {
         if (!itemsMap.has(key)) {
           itemsMap.set(key, prod);
         } else {
-          // If duplicate SKU exists, prefer doc where docSnap.id === prod.sku or has newer updatedAt
           const existing = itemsMap.get(key)!;
           if (docSnap.id === prod.sku || (prod.updatedAt && (!existing.updatedAt || prod.updatedAt > existing.updatedAt))) {
             itemsMap.set(key, prod);
@@ -101,23 +121,20 @@ export default function App() {
       });
 
       const items = Array.from(itemsMap.values());
-      // Sort alphabetically by SKU
       items.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
       setProducts(items);
 
-      // Auto Seed if Firestore is completely empty!
       if (items.length === 0 && !isSeeding) {
         seedDatabaseInternal();
       }
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'products');
-      // Fallback to local catalog if Firestore connection experiences latency
       setProducts(INITIAL_PRODUCTS);
     });
 
     // Movements Listener
     const movementsRef = collection(db, 'inventory_movements');
-    const movementsQuery = query(movementsRef, orderBy('timestamp', 'desc'), limit(150));
+    const movementsQuery = query(movementsRef, orderBy('timestamp', 'desc'), limit(200));
     const unsubMovements = onSnapshot(movementsQuery, (snapshot) => {
       const movs: InventoryMovement[] = [];
       snapshot.forEach((doc) => {
@@ -158,12 +175,56 @@ export default function App() {
       setRemisiones(rems);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'remisiones'));
 
+    // Apartados Listener
+    const apartadosRef = collection(db, 'apartados');
+    const unsubApartados = onSnapshot(apartadosRef, (snapshot) => {
+      const list: Apartado[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Apartado);
+      });
+      setApartados(list);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'apartados'));
+
+    // Pedidos Especiales Listener
+    const pedidosEspRef = collection(db, 'pedidos_especiales');
+    const unsubPedidosEsp = onSnapshot(pedidosEspRef, (snapshot) => {
+      const list: PedidoEspecial[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as PedidoEspecial);
+      });
+      setPedidosEspeciales(list);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_especiales'));
+
+    // Listas de Precios Listener
+    const listasPreciosRef = collection(db, 'listas_precios');
+    const unsubListasPrecios = onSnapshot(listasPreciosRef, (snapshot) => {
+      const list: PrecioListaItem[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as PrecioListaItem);
+      });
+      setListasPrecios(list);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'listas_precios'));
+
+    // Pedidos Mercado Libre Listener
+    const pedidosMLRef = collection(db, 'pedidos_ml');
+    const unsubPedidosML = onSnapshot(pedidosMLRef, (snapshot) => {
+      const list: PedidoMercadoLibre[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as PedidoMercadoLibre);
+      });
+      setPedidosML(list);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_ml'));
+
     return () => {
       unsubProducts();
       unsubMovements();
       unsubOrders();
       unsubCustomers();
       unsubRemisiones();
+      unsubApartados();
+      unsubPedidosEsp();
+      unsubListasPrecios();
+      unsubPedidosML();
     };
   }, []);
 
@@ -535,6 +596,188 @@ export default function App() {
     }
   };
 
+  // Delete Movements (Entradas or Salidas selected via checkboxes)
+  const handleDeleteMovements = async (ids: string[]) => {
+    try {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        const ref = doc(db, 'inventory_movements', id);
+        batch.delete(ref);
+      });
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'inventory_movements');
+      throw err;
+    }
+  };
+
+  // Reset Movements / Clean History
+  const handleResetMovements = async (tipoFilter?: 'ENTRADA' | 'SALIDA' | 'ALL') => {
+    try {
+      const movsRef = collection(db, 'inventory_movements');
+      const snap = await getDocs(movsRef);
+      const batch = writeBatch(db);
+      
+      snap.forEach(d => {
+        const data = d.data();
+        if (!tipoFilter || tipoFilter === 'ALL' || data.tipo === tipoFilter) {
+          batch.delete(d.ref);
+        }
+      });
+
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'inventory_movements');
+      throw err;
+    }
+  };
+
+  // Apartados Handlers
+  const handleAddApartado = async (apartadoData: Omit<Apartado, 'id' | 'createdAt' | 'estado'>) => {
+    try {
+      const ref = collection(db, 'apartados');
+      await addDoc(ref, {
+        ...apartadoData,
+        estado: 'ACTIVO',
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'apartados');
+      throw err;
+    }
+  };
+
+  const handleLiberarApartado = async (id: string) => {
+    try {
+      const ref = doc(db, 'apartados', id);
+      await updateDoc(ref, { estado: 'LIBERADO' });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `apartados/${id}`);
+      throw err;
+    }
+  };
+
+  // Pedidos Especiales Handlers
+  const handleAddPedidoEspecial = async (pedidoData: Omit<PedidoEspecial, 'id' | 'createdAt'>) => {
+    try {
+      const ref = collection(db, 'pedidos_especiales');
+      await addDoc(ref, {
+        ...pedidoData,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'pedidos_especiales');
+      throw err;
+    }
+  };
+
+  const handleUpdateEstadoPedidoEspecial = async (id: string, estado: PedidoEspecial['estado']) => {
+    try {
+      const ref = doc(db, 'pedidos_especiales', id);
+      await updateDoc(ref, { estado });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `pedidos_especiales/${id}`);
+      throw err;
+    }
+  };
+
+  const handleDeletePedidoEspecial = async (id: string) => {
+    try {
+      const ref = doc(db, 'pedidos_especiales', id);
+      await deleteDoc(ref);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `pedidos_especiales/${id}`);
+      throw err;
+    }
+  };
+
+  // Listas de Precios Handlers
+  const handleAddPrecioItem = async (itemData: Omit<PrecioListaItem, 'id'>) => {
+    try {
+      const ref = collection(db, 'listas_precios');
+      await addDoc(ref, itemData);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'listas_precios');
+      throw err;
+    }
+  };
+
+  const handleUpdatePrecioItem = async (id: string, updates: Partial<PrecioListaItem>) => {
+    try {
+      const ref = doc(db, 'listas_precios', id);
+      await updateDoc(ref, updates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `listas_precios/${id}`);
+      throw err;
+    }
+  };
+
+  const handleDeletePrecioItem = async (id: string) => {
+    try {
+      const ref = doc(db, 'listas_precios', id);
+      await deleteDoc(ref);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `listas_precios/${id}`);
+      throw err;
+    }
+  };
+
+  const handleSyncPreciosFromCatalog = async () => {
+    try {
+      const now = new Date().toISOString();
+      const batch = writeBatch(db);
+
+      products.forEach(p => {
+        const docRef = doc(collection(db, 'listas_precios'));
+        batch.set(docRef, {
+          categoria: p.categoria || 'Consumibles GMD',
+          precio: p.precio || 0,
+          descripcion: `[${p.sku}] ${p.descripcion}`,
+          updatedAt: now
+        });
+      });
+
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'listas_precios');
+      throw err;
+    }
+  };
+
+  // Mercado Libre Handlers
+  const handleAddPedidoML = async (pedidoData: Omit<PedidoMercadoLibre, 'id' | 'createdAt'>) => {
+    try {
+      const ref = collection(db, 'pedidos_ml');
+      await addDoc(ref, {
+        ...pedidoData,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'pedidos_ml');
+      throw err;
+    }
+  };
+
+  const handleToggleCampoML = async (id: string, field: 'pedidoAKronaline' | 'entregado', value: boolean) => {
+    try {
+      const ref = doc(db, 'pedidos_ml', id);
+      await updateDoc(ref, { [field]: value });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `pedidos_ml/${id}`);
+      throw err;
+    }
+  };
+
+  const handleDeletePedidoML = async (id: string) => {
+    try {
+      const ref = doc(db, 'pedidos_ml', id);
+      await deleteDoc(ref);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `pedidos_ml/${id}`);
+      throw err;
+    }
+  };
+
   // Quick action navigation helpers
   const handleQuickStockIn = (product: Product) => {
     setQuickProductForIn(product);
@@ -612,12 +855,22 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'existencias' && (
+          <ExistenciasDisponiblesView
+            products={products}
+            apartados={apartados}
+            onAddApartado={handleAddApartado}
+            onLiberarApartado={handleLiberarApartado}
+          />
+        )}
+
         {activeTab === 'entradas' && (
           <StockInView
             products={products}
             initialProduct={quickProductForIn}
             onRecordStockIn={handleRecordStockIn}
             movements={movements}
+            onDeleteMovements={handleDeleteMovements}
           />
         )}
 
@@ -627,6 +880,26 @@ export default function App() {
             initialProduct={quickProductForOut}
             onRecordStockOut={handleRecordStockOut}
             movements={movements}
+            onDeleteMovements={handleDeleteMovements}
+          />
+        )}
+
+        {activeTab === 'pedidos-especiales' && (
+          <PedidosEspecialesView
+            pedidosEspeciales={pedidosEspeciales}
+            products={products}
+            onAddPedidoEspecial={handleAddPedidoEspecial}
+            onUpdateEstado={handleUpdateEstadoPedidoEspecial}
+            onDeletePedidoEspecial={handleDeletePedidoEspecial}
+          />
+        )}
+
+        {activeTab === 'pedidos-ml' && (
+          <PedidosMercadoLibreView
+            pedidosML={pedidosML}
+            onAddPedidoML={handleAddPedidoML}
+            onToggleCampoML={handleToggleCampoML}
+            onDeletePedidoML={handleDeletePedidoML}
           />
         )}
 
@@ -641,10 +914,31 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'reportes-vendedor' && (
+          <ReporteVendedorView
+            remisiones={remisiones}
+            apartados={apartados}
+            pedidosEspeciales={pedidosEspeciales}
+            movements={movements}
+          />
+        )}
+
+        {activeTab === 'listas-precios' && (
+          <ListasPreciosView
+            listasPrecios={listasPrecios}
+            products={products}
+            onAddPrecioItem={handleAddPrecioItem}
+            onUpdatePrecioItem={handleUpdatePrecioItem}
+            onDeletePrecioItem={handleDeletePrecioItem}
+            onSyncFromCatalog={handleSyncPreciosFromCatalog}
+          />
+        )}
+
         {activeTab === 'reportes' && (
           <ReportsView
             products={products}
             movements={movements}
+            onResetMovements={handleResetMovements}
           />
         )}
 

@@ -8,7 +8,9 @@ import {
   ArrowUpFromLine, 
   Calendar, 
   FileText,
-  DollarSign
+  DollarSign,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import { Product, InventoryMovement } from '../types';
 import { generateInventoryReportPDF } from '../utils/pdfGenerator';
@@ -16,15 +18,34 @@ import { generateInventoryReportPDF } from '../utils/pdfGenerator';
 interface ReportsViewProps {
   products: Product[];
   movements: InventoryMovement[];
+  onResetMovements?: (tipoFilter?: 'ENTRADA' | 'SALIDA' | 'ALL') => Promise<void>;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
   products,
-  movements
+  movements,
+  onResetMovements
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'ENTRADA' | 'SALIDA'>('ALL');
   const [dateFilter, setDateFilter] = useState<'ALL' | 'TODAY' | 'WEEK' | 'MONTH'>('ALL');
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleReset = async (tipo: 'ENTRADA' | 'SALIDA' | 'ALL') => {
+    if (!onResetMovements) return;
+    const label = tipo === 'ENTRADA' ? 'entradas' : tipo === 'SALIDA' ? 'salidas' : 'TODOS los movimientos';
+    if (confirm(`¿Confirma eliminar definitivamente los registros de ${label}?`)) {
+      setIsResetting(true);
+      try {
+        await onResetMovements(tipo);
+        alert(`Historial de ${label} eliminado con éxito.`);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsResetting(false);
+      }
+    }
+  };
 
   const filteredMovements = movements.filter(m => {
     const matchesSearch = 
@@ -116,6 +137,38 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <Download className="w-4 h-4 text-emerald-400" />
             <span>Exportar Historial (CSV)</span>
           </button>
+
+          {onResetMovements && (
+            <div className="flex items-center space-x-1 bg-red-950/80 p-1 rounded-xl border border-red-800">
+              <button
+                onClick={() => handleReset('ENTRADA')}
+                disabled={isResetting}
+                className="text-[11px] font-bold text-red-300 hover:text-white px-2 py-1 rounded hover:bg-red-900 transition-colors cursor-pointer"
+                title="Limpiar entradas de almacén"
+              >
+                Reset Entradas
+              </button>
+              <span className="text-red-800">|</span>
+              <button
+                onClick={() => handleReset('SALIDA')}
+                disabled={isResetting}
+                className="text-[11px] font-bold text-amber-300 hover:text-white px-2 py-1 rounded hover:bg-red-900 transition-colors cursor-pointer"
+                title="Limpiar salidas de almacén"
+              >
+                Reset Salidas
+              </button>
+              <span className="text-red-800">|</span>
+              <button
+                onClick={() => handleReset('ALL')}
+                disabled={isResetting}
+                className="text-[11px] font-black text-red-400 hover:text-red-200 px-2 py-1 rounded hover:bg-red-900 transition-colors cursor-pointer flex items-center space-x-1"
+                title="Limpiar todos los movimientos"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Reset Todo</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

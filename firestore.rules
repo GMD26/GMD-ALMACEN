@@ -27,6 +27,22 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /apartados/{apartadoId} {
+      allow read, write: if true;
+    }
+
+    match /pedidos_especiales/{pedidoId} {
+      allow read, write: if true;
+    }
+
+    match /listas_precios/{precioId} {
+      allow read, write: if true;
+    }
+
+    match /pedidos_ml/{pedidoMlId} {
+      allow read, write: if true;
+    }
+
     match /test/{docId} {
       allow read, write: if true;
     }

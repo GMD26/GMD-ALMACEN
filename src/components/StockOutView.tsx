@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUpFromLine, CheckCircle, PackageMinus, Search, UserCheck, FileText, AlertCircle, MapPin } from 'lucide-react';
+import { ArrowUpFromLine, CheckCircle, PackageMinus, Search, UserCheck, FileText, AlertCircle, MapPin, Trash2 } from 'lucide-react';
 import { Product, InventoryMovement } from '../types';
 
 interface StockOutViewProps {
@@ -12,13 +12,15 @@ interface StockOutViewProps {
     notes: string
   ) => Promise<void>;
   movements: InventoryMovement[];
+  onDeleteMovements?: (ids: string[]) => Promise<void>;
 }
 
 export const StockOutView: React.FC<StockOutViewProps> = ({
   products,
   initialProduct,
   onRecordStockOut,
-  movements
+  movements,
+  onDeleteMovements
 }) => {
   const [selectedSku, setSelectedSku] = useState<string>(initialProduct?.sku || '');
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,6 +30,9 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Checkbox Selection State for Deleting
+  const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
 
   const selectedProduct = products.find(p => p.sku === selectedSku);
 
@@ -83,6 +88,30 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
   };
 
   const stockOutMovements = movements.filter(m => m.tipo === 'SALIDA');
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedMovementIds(stockOutMovements.map(m => m.id));
+    } else {
+      setSelectedMovementIds([]);
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedMovementIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedMovementIds.length === 0 || !onDeleteMovements) return;
+    if (confirm(`¿Confirma eliminar ${selectedMovementIds.length} registro(s) de salida seleccionados?`)) {
+      await onDeleteMovements(selectedMovementIds);
+      setSelectedMovementIds([]);
+      setSuccessMessage(`Se eliminaron ${selectedMovementIds.length} salida(s) de almacén.`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -234,15 +263,36 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
 
         {/* History Table Column (2 cols) */}
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <h2 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-2 flex items-center justify-between">
-            <span>Historial de Salidas Recientes</span>
-            <span className="text-xs text-slate-500 font-normal">{stockOutMovements.length} registros total</span>
-          </h2>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h2 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <span>Historial de Salidas Recientes</span>
+              <span className="text-xs text-slate-500 font-normal">({stockOutMovements.length} total)</span>
+            </h2>
+
+            {/* Delete Selected Button */}
+            {selectedMovementIds.length > 0 && onDeleteMovements && (
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center space-x-1.5 px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg shadow transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Eliminar Seleccionadas ({selectedMovementIds.length})</span>
+              </button>
+            )}
+          </div>
 
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold sticky top-0">
                 <tr>
+                  <th className="py-2.5 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={stockOutMovements.length > 0 && selectedMovementIds.length === stockOutMovements.length}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                  </th>
                   <th className="py-2.5 px-3">Fecha y Hora</th>
                   <th className="py-2.5 px-3">SKU</th>
                   <th className="py-2.5 px-3">Cant.</th>
@@ -254,33 +304,44 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
               <tbody className="divide-y divide-slate-100 font-medium">
                 {stockOutMovements.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-slate-400">
+                    <td colSpan={7} className="text-center py-10 text-slate-400">
                       No hay salidas de almacén registradas recientemente.
                     </td>
                   </tr>
                 ) : (
-                  stockOutMovements.map((m) => (
-                    <tr key={m.id} className="hover:bg-amber-50/40 transition-colors">
-                      <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                        {new Date(m.timestamp).toLocaleString('es-MX')}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">
-                        {m.sku}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-amber-600">
-                        -{m.cantidad}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-700">
-                        {m.stockNuevo}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 max-w-[150px] truncate" title={m.referencia}>
-                        {m.referencia}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500 text-[11px] truncate max-w-[120px]">
-                        {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}
-                      </td>
-                    </tr>
-                  ))
+                  stockOutMovements.map((m) => {
+                    const isSelected = selectedMovementIds.includes(m.id);
+                    return (
+                      <tr key={m.id} className={`transition-colors ${isSelected ? 'bg-amber-100/70' : 'hover:bg-amber-50/40'}`}>
+                        <td className="py-2.5 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(m.id)}
+                            className="rounded text-amber-600 focus:ring-amber-500"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                          {new Date(m.timestamp).toLocaleString('es-MX')}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">
+                          {m.sku}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-amber-600">
+                          -{m.cantidad}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-700">
+                          {m.stockNuevo}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 max-w-[150px] truncate" title={m.referencia}>
+                          {m.referencia}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 text-[11px] truncate max-w-[120px]">
+                          {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

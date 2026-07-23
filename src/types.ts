@@ -116,4 +116,73 @@ export interface Remision {
   createdAt: string;
 }
 
-export type ActiveTab = 'portada' | 'dashboard' | 'inventory' | 'entradas' | 'salidas' | 'pedidos' | 'reportes' | 'remisiones' | 'clientes';
+export type VendedorNombre = 'Manuel' | 'Luis' | 'César' | 'Mercado Libre' | 'Mostrador';
+
+export interface Apartado {
+  id: string;
+  productId: string;
+  sku: string;
+  descripcion: string;
+  medida: string;
+  cantidadApartada: number;
+  nombre: VendedorNombre;
+  fecha: string;
+  notas?: string;
+  estado: 'ACTIVO' | 'LIBERADO' | 'COMPLETADO';
+  createdAt: string;
+}
+
+export interface PedidoEspecial {
+  id: string;
+  folio: string;
+  nombre: VendedorNombre;
+  cliente: string;
+  detalles: string;
+  montoEstimado?: number;
+  fecha: string;
+  estado: 'PENDIENTE' | 'EN_PROCESO' | 'COMPLETADO' | 'CANCELADO';
+  notas?: string;
+  createdAt: string;
+}
+
+export interface PrecioListaItem {
+  id: string;
+  categoria: string;
+  precio: number;
+  descripcion: string;
+  updatedAt?: string;
+}
+
+export interface PedidoMercadoLibre {
+  id: string;
+  numPedidoML: string;
+  clienteML: string;
+  descripcionProducto: string;
+  cantidad: number;
+  pedidoAKronaline: boolean;
+  entregado: boolean;
+  fecha: string;
+  notas?: string;
+  createdAt: string;
+}
+
+export type ActiveTab = 
+  | 'portada' 
+  | 'dashboard' 
+  | 'inventory' 
+  | 'existencias'
+  | 'existencias_disponibles'
+  | 'listas-precios'
+  | 'listas_precios'
+  | 'entradas' 
+  | 'salidas' 
+  | 'pedidos-especiales'
+  | 'pedidos_especiales'
+  | 'pedidos-ml'
+  | 'pedidos_ml'
+  | 'pedidos' 
+  | 'reportes' 
+  | 'reportes-vendedor'
+  | 'reporte_vendedor'
+  | 'remisiones' 
+  | 'clientes';

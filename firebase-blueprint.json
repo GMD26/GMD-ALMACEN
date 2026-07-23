@@ -91,6 +91,30 @@
     "/purchase_orders/{orderId}": {
       "schema": "PurchaseOrder",
       "description": "Purchase orders for low stock items"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customer list"
+    },
+    "/remisiones/{remisionId}": {
+      "schema": "Remision",
+      "description": "Remisiones format catalog and sales records"
+    },
+    "/apartados/{apartadoId}": {
+      "schema": "Apartado",
+      "description": "Apartados and frozen inventory records"
+    },
+    "/pedidos_especiales/{pedidoId}": {
+      "schema": "PedidoEspecial",
+      "description": "Special orders requested by sales representatives"
+    },
+    "/listas_precios/{precioId}": {
+      "schema": "PrecioListaItem",
+      "description": "Price list items catalog"
+    },
+    "/pedidos_ml/{pedidoMlId}": {
+      "schema": "PedidoMercadoLibre",
+      "description": "Mercado Libre orders tracking"
     }
   }
 }
