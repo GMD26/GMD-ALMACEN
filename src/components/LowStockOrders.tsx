@@ -227,13 +227,13 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                 <p className="text-xs text-slate-500">No hay productos por debajo del umbral mínimo de stock.</p>
               </div>
             ) : (
-              lowStockProducts.map((p) => {
+              lowStockProducts.map((p, idx) => {
                 const isSelected = selectedItems[p.sku]?.selected ?? true;
                 const currentQty = selectedItems[p.sku]?.qty ?? Math.max(1, (p.minStock * 2) - p.cantidadActual);
 
                 return (
                   <div
-                    key={p.sku}
+                    key={`${p.sku}-${idx}`}
                     className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                       isSelected ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-200 opacity-60'
                     }`}
@@ -402,8 +402,8 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                   </td>
                 </tr>
               ) : (
-                purchaseOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                purchaseOrders.map((order, idx) => (
+                  <tr key={`${order.id}-${idx}`} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900">
                       {order.folio}
                     </td>

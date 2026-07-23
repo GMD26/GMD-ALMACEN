@@ -13,15 +13,19 @@ import {
   ArrowDownToLine, 
   ArrowUpFromLine,
   Trash2,
-  Database
+  Database,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Product } from '../types';
+import { BulkImportModal } from './BulkImportModal';
 
 interface InventoryListProps {
   products: Product[];
   onAddProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  onBulkImport?: (products: Omit<Product, 'id'>[], replaceExisting: boolean) => Promise<void>;
   onSeedDatabase: () => Promise<void>;
+  onResetAllStockToZero?: () => Promise<void>;
   onOpenQuickStockIn: (product: Product) => void;
   onOpenQuickStockOut: (product: Product) => void;
   isSeeding: boolean;
@@ -31,7 +35,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({
   products,
   onAddProduct,
   onUpdateProduct,
+  onBulkImport,
   onSeedDatabase,
+  onResetAllStockToZero,
   onOpenQuickStockIn,
   onOpenQuickStockOut,
   isSeeding
@@ -43,6 +49,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // New product form
@@ -147,6 +155,19 @@ export const InventoryList: React.FC<InventoryListProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Reset All Stock Button */}
+          {onResetAllStockToZero && (
+            <button
+              onClick={() => setIsResetConfirmOpen(true)}
+              disabled={isSeeding}
+              className="flex items-center space-x-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-300 font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
+              title="Poner en 0 la cantidad actual de todos los productos para captura manual"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSeeding ? 'animate-spin text-amber-600' : ''}`} />
+              <span>{isSeeding ? 'Procesando...' : 'Dejar Inventario en 0'}</span>
+            </button>
+          )}
+
           {/* Seed Database Button */}
           {products.length === 0 && (
             <button
@@ -156,6 +177,18 @@ export const InventoryList: React.FC<InventoryListProps> = ({
             >
               <Database className="w-4 h-4" />
               <span>{isSeeding ? 'Cargando Catálogo...' : 'Cargar Catálogo Oficial Grupo Más Digital'}</span>
+            </button>
+          )}
+
+          {/* Import Excel/CSV Button */}
+          {onBulkImport && (
+            <button
+              onClick={() => setIsBulkImportOpen(true)}
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer"
+              title="Importar lista completa de productos desde Excel o CSV (hasta 613+ registros)"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Importar Excel / CSV</span>
             </button>
           )}
 
@@ -268,12 +301,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((p) => {
+                filteredProducts.map((p, idx) => {
                   const isOutOfStock = p.cantidadActual === 0;
                   const isLowStock = p.cantidadActual <= p.minStock && !isOutOfStock;
 
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={`${p.id || p.sku}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       
                       {/* SKU */}
                       <td className="py-3.5 px-4">
@@ -616,6 +649,63 @@ export const InventoryList: React.FC<InventoryListProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* RESET ALL STOCK CONFIRMATION MODAL */}
+      {isResetConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden p-6 space-y-4 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center space-x-3 text-amber-600">
+              <div className="p-2.5 rounded-xl bg-amber-100">
+                <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">
+                ¿Dejar Todo el Inventario en 0?
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Esta acción establecerá la <strong>cantidad actual en 0</strong> y el <strong>stock mínimo en 0</strong> para todos los <strong>{products.length} productos</strong> registrados en el sistema para que puedas realizar la captura manual de existencias y mínimos.
+            </p>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium space-y-1">
+              <div>✓ Conserva todos los SKUs, precios, categorías y descripciones.</div>
+              <div>✓ Establece la cantidad disponible y el stock mínimo en 0 unidades.</div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsResetConfirmOpen(false);
+                  if (onResetAllStockToZero) {
+                    await onResetAllStockToZero();
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-md transition-colors cursor-pointer"
+              >
+                Sí, Restablecer Todo a 0
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK IMPORT MODAL */}
+      {onBulkImport && (
+        <BulkImportModal
+          isOpen={isBulkImportOpen}
+          onClose={() => setIsBulkImportOpen(false)}
+          onBulkImport={onBulkImport}
+          existingProductCount={products.length}
+        />
       )}
 
     </div>

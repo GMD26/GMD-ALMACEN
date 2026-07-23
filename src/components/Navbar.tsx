@@ -9,7 +9,8 @@ import {
   LogOut, 
   User as UserIcon,
   CheckCircle2,
-  Lock
+  Receipt,
+  Home
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
@@ -38,18 +39,18 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           
-          {/* Logo & Brand */}
-          <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setActiveTab('dashboard')}>
+          {/* Logo & Brand - Click goes to Portada */}
+          <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setActiveTab('portada')}>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
+                <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent group-hover:to-cyan-200">
                   GRUPO MÁS DIGITAL
                 </span>
                 <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hidden sm:inline-block">
-                  SISTEMA DE INVENTARIO
+                  SISTEMA DUAL
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Control Interno de Entradas, Salidas y Material Faltante</p>
+              <p className="text-xs text-slate-400 hidden sm:block">Control de Inventario GMD 26 y Notas de Remisión</p>
             </div>
           </div>
 
@@ -73,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="font-semibold text-slate-200">{user.displayName || user.email?.split('@')[0]}</div>
                   <div className="text-cyan-400 text-[10px] flex items-center space-x-1">
                     <CheckCircle2 className="w-3 h-3 text-cyan-400" />
-                    <span>Cuenta de Google Verificada</span>
+                    <span>Google Verificado</span>
                   </div>
                 </div>
                 <button
@@ -100,6 +101,38 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Navigation Tabs Bar */}
         <nav className="flex space-x-1 overflow-x-auto py-2 scrollbar-none border-t border-slate-800/80">
+          
+          {/* Portada Principal */}
+          <button
+            onClick={() => setActiveTab('portada')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'portada'
+                ? 'bg-slate-700 text-white font-black ring-1 ring-slate-500'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Home className="w-4 h-4 text-cyan-400" />
+            <span>Portada Principal</span>
+          </button>
+
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Botón Remisión Directo */}
+          <button
+            onClick={() => setActiveTab('remisiones')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+              activeTab === 'remisiones'
+                ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
+                : 'text-emerald-400 hover:bg-slate-800 hover:text-emerald-300 font-bold'
+            }`}
+          >
+            <Receipt className="w-4 h-4" />
+            <span>Remisión</span>
+          </button>
+
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Sección Control de Inventario GMD 26 */}
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
@@ -109,7 +142,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
-            <span>Resumen</span>
+            <span>Resumen GMD 26</span>
           </button>
 
           <button
@@ -121,7 +154,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Boxes className="w-4 h-4" />
-            <span>Inventario de SKUs</span>
+            <span>Inventario SKUs</span>
           </button>
 
           <button
@@ -157,7 +190,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <AlertTriangle className="w-4 h-4" />
-            <span>Pedidos de Material</span>
+            <span>Pedidos Material</span>
             {lowStockCount > 0 && (
               <span className="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold bg-white text-red-600 rounded-full animate-pulse">
                 {lowStockCount}
@@ -181,3 +214,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

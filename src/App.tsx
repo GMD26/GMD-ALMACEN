@@ -9,6 +9,7 @@ import {
   setDoc, 
   addDoc, 
   updateDoc, 
+  deleteDoc,
   onSnapshot, 
   query, 
   orderBy, 
@@ -19,7 +20,7 @@ import {
   OperationType
 } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { Product, InventoryMovement, PurchaseOrder, UserProfile, ActiveTab } from './types';
+import { Product, InventoryMovement, PurchaseOrder, UserProfile, ActiveTab, Customer, Remision } from './types';
 import { INITIAL_PRODUCTS } from './data/initialCatalog';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
@@ -29,12 +30,16 @@ import { StockOutView } from './components/StockOutView';
 import { LowStockOrders } from './components/LowStockOrders';
 import { ReportsView } from './components/ReportsView';
 import { AuthModal } from './components/AuthModal';
+import { Portada } from './components/Portada';
+import { RemisionView } from './components/RemisionView';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('portada');
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [remisiones, setRemisiones] = useState<Remision[]>([]);
   
   // Auth state
   const [user, setUser] = useState<User | null>(null);
@@ -80,13 +85,24 @@ export default function App() {
     // Products Listener
     const productsRef = collection(db, 'products');
     const unsubProducts = onSnapshot(productsRef, (snapshot) => {
-      const items: Product[] = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() } as Product);
+      const itemsMap = new Map<string, Product>();
+      snapshot.forEach((docSnap) => {
+        const prod = { id: docSnap.id, ...docSnap.data() } as Product;
+        const key = (prod.sku || docSnap.id).toUpperCase();
+        if (!itemsMap.has(key)) {
+          itemsMap.set(key, prod);
+        } else {
+          // If duplicate SKU exists, prefer doc where docSnap.id === prod.sku or has newer updatedAt
+          const existing = itemsMap.get(key)!;
+          if (docSnap.id === prod.sku || (prod.updatedAt && (!existing.updatedAt || prod.updatedAt > existing.updatedAt))) {
+            itemsMap.set(key, prod);
+          }
+        }
       });
 
+      const items = Array.from(itemsMap.values());
       // Sort alphabetically by SKU
-      items.sort((a, b) => a.sku.localeCompare(b.sku));
+      items.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
       setProducts(items);
 
       // Auto Seed if Firestore is completely empty!
@@ -121,27 +137,142 @@ export default function App() {
       setPurchaseOrders(orders);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'purchase_orders'));
 
+    // Customers Listener
+    const customersRef = collection(db, 'customers');
+    const unsubCustomers = onSnapshot(customersRef, (snapshot) => {
+      const custs: Customer[] = [];
+      snapshot.forEach((doc) => {
+        custs.push({ id: doc.id, ...doc.data() } as Customer);
+      });
+      setCustomers(custs);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'customers'));
+
+    // Remisiones Listener
+    const remisionesRef = collection(db, 'remisiones');
+    const remisionesQuery = query(remisionesRef, orderBy('createdAt', 'desc'), limit(100));
+    const unsubRemisiones = onSnapshot(remisionesQuery, (snapshot) => {
+      const rems: Remision[] = [];
+      snapshot.forEach((doc) => {
+        rems.push({ id: doc.id, ...doc.data() } as Remision);
+      });
+      setRemisiones(rems);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'remisiones'));
+
     return () => {
       unsubProducts();
       unsubMovements();
       unsubOrders();
+      unsubCustomers();
+      unsubRemisiones();
     };
   }, []);
 
-  // Seed Catalog Function
+  // Seed Catalog Function with 0 stock & 0 minStock
   const seedDatabaseInternal = async () => {
     setIsSeeding(true);
     try {
       const batch = writeBatch(db);
       INITIAL_PRODUCTS.forEach((prod) => {
         const docRef = doc(db, 'products', prod.sku);
-        batch.set(docRef, prod);
+        batch.set(docRef, { ...prod, cantidadActual: 0, minStock: 0 });
       });
       await batch.commit();
-      console.log("Database seeded successfully with official Grupo Más Digital catalog!");
+      console.log("Database seeded successfully with 0 stock and 0 minStock!");
     } catch (err) {
       console.error("Error seeding catalog:", err);
-      setProducts(INITIAL_PRODUCTS);
+      setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, cantidadActual: 0, minStock: 0 })));
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Reset all stock and minStock to 0 for manual inventory entry
+  const handleResetAllStockToZero = async () => {
+    setIsSeeding(true);
+    try {
+      const now = new Date().toISOString();
+      const updatedBy = userProfile?.displayName || 'Usuario';
+
+      if (products.length > 0) {
+        // Process in chunks of 350 for Firestore batch safety
+        const chunks: Product[][] = [];
+        for (let i = 0; i < products.length; i += 350) {
+          chunks.push(products.slice(i, i + 350));
+        }
+
+        for (const chunk of chunks) {
+          const batch = writeBatch(db);
+          chunk.forEach((prod) => {
+            const docRef = doc(db, 'products', prod.id);
+            batch.update(docRef, {
+              cantidadActual: 0,
+              minStock: 0,
+              updatedAt: now,
+              updatedBy: updatedBy
+            });
+          });
+          await batch.commit();
+        }
+      } else {
+        await seedDatabaseInternal();
+      }
+
+      setProducts(prev => prev.map(p => ({ ...p, cantidadActual: 0, minStock: 0, updatedAt: now })));
+      console.log("Inventario y stock mínimo reiniciados a 0 exitosamente.");
+    } catch (err) {
+      console.error("Error al reiniciar inventario a 0:", err);
+      // Fallback local update
+      setProducts(prev => prev.map(p => ({ ...p, cantidadActual: 0, minStock: 0 })));
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Bulk Import Products Handler for Excel/CSV (e.g. 613+ productos)
+  const handleBulkImportProducts = async (newProducts: Omit<Product, 'id'>[], replaceExisting: boolean) => {
+    setIsSeeding(true);
+    try {
+      const now = new Date().toISOString();
+      const user = userProfile?.displayName || 'Importación Masiva';
+
+      // Map to full Product objects with id = sku
+      const formattedProducts: Product[] = newProducts.map(p => ({
+        ...p,
+        id: p.sku,
+        updatedAt: now,
+        updatedBy: user
+      }));
+
+      // Write in batches of 350 to Firestore
+      const chunks: Product[][] = [];
+      for (let i = 0; i < formattedProducts.length; i += 350) {
+        chunks.push(formattedProducts.slice(i, i + 350));
+      }
+
+      for (const chunk of chunks) {
+        const batch = writeBatch(db);
+        chunk.forEach(p => {
+          const docRef = doc(db, 'products', p.id);
+          batch.set(docRef, p, { merge: true });
+        });
+        await batch.commit();
+      }
+
+      if (replaceExisting) {
+        setProducts(formattedProducts);
+      } else {
+        setProducts(prev => {
+          const map = new Map<string, Product>();
+          prev.forEach(p => map.set(p.id, p));
+          formattedProducts.forEach(p => map.set(p.id, p));
+          return Array.from(map.values());
+        });
+      }
+
+      console.log(`${formattedProducts.length} productos importados con éxito.`);
+    } catch (err) {
+      console.error("Error en importación masiva:", err);
+      throw err;
     } finally {
       setIsSeeding(false);
     }
@@ -330,6 +461,80 @@ export default function App() {
     await batch.commit();
   };
 
+  // Customer & Remision Handlers
+  const handleAddCustomer = async (customer: Omit<Customer, 'id'>) => {
+    try {
+      const custRef = collection(db, 'customers');
+      await addDoc(custRef, customer);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'customers');
+      throw err;
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    try {
+      const custRef = doc(db, 'customers', id);
+      await deleteDoc(custRef);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `customers/${id}`);
+      throw err;
+    }
+  };
+
+  const handleSaveRemision = async (remisionData: Omit<Remision, 'id'>, discountStock: boolean) => {
+    try {
+      const remisionesRef = collection(db, 'remisiones');
+      const docRef = await addDoc(remisionesRef, remisionData);
+
+      if (discountStock) {
+        const batch = writeBatch(db);
+        const now = new Date();
+
+        for (const item of remisionData.items) {
+          if (!item.sku) continue;
+          const prod = products.find(p => p.sku.toUpperCase() === item.sku.toUpperCase());
+          if (prod) {
+            const prevStock = prod.cantidadActual;
+            const newStock = Math.max(0, prevStock - item.cantidad);
+
+            const prodRef = doc(db, 'products', prod.id);
+            batch.update(prodRef, {
+              cantidadActual: newStock,
+              updatedAt: now.toISOString()
+            });
+
+            // Add movement record
+            const movRef = doc(collection(db, 'inventory_movements'));
+            batch.set(movRef, {
+              productId: prod.id,
+              sku: prod.sku,
+              descripcion: prod.descripcion,
+              tipo: 'SALIDA',
+              cantidad: item.cantidad,
+              stockAnterior: prevStock,
+              stockNuevo: newStock,
+              referencia: `Remisión ${remisionData.folio} - ${remisionData.cliente.razonSocial}`,
+              ubicacion: prod.ubicacionAlmacen || 'ALMACEN CENTRAL',
+              usuarioEmail: userProfile?.email || 'Mas.Digital1@gmail.com',
+              usuarioNombre: userProfile?.displayName || 'Grupo Más Digital',
+              costoOPrecioUnitario: item.precioUnitario,
+              notas: `Salida automática por emisión de Nota de Remisión ${remisionData.folio}`,
+              fecha: remisionData.fecha,
+              timestamp: now.getTime()
+            });
+          }
+        }
+        await batch.commit();
+      }
+
+      return docRef.id;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'remisiones');
+      throw err;
+    }
+  };
+
   // Quick action navigation helpers
   const handleQuickStockIn = (product: Product) => {
     setQuickProductForIn(product);
@@ -360,6 +565,27 @@ export default function App() {
       {/* Main Content Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
+        {activeTab === 'portada' && (
+          <Portada
+            onOpenInventario={() => setActiveTab('dashboard')}
+            onOpenRemision={() => setActiveTab('remisiones')}
+            totalProductsCount={products.length}
+          />
+        )}
+
+        {activeTab === 'remisiones' && (
+          <RemisionView
+            products={products}
+            customers={customers}
+            remisiones={remisiones}
+            userProfile={userProfile}
+            onSaveRemision={handleSaveRemision}
+            onAddCustomer={handleAddCustomer}
+            onDeleteCustomer={handleDeleteCustomer}
+            onBackToPortada={() => setActiveTab('portada')}
+          />
+        )}
+
         {activeTab === 'dashboard' && (
           <Dashboard
             products={products}
@@ -367,6 +593,8 @@ export default function App() {
             setActiveTab={setActiveTab}
             onOpenStockIn={() => setActiveTab('entradas')}
             onOpenStockOut={() => setActiveTab('salidas')}
+            onOpenQuickStockIn={handleQuickStockIn}
+            onOpenQuickStockOut={handleQuickStockOut}
           />
         )}
 
@@ -375,7 +603,9 @@ export default function App() {
             products={products}
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
+            onBulkImport={handleBulkImportProducts}
             onSeedDatabase={seedDatabaseInternal}
+            onResetAllStockToZero={handleResetAllStockToZero}
             onOpenQuickStockIn={handleQuickStockIn}
             onOpenQuickStockOut={handleQuickStockOut}
             isSeeding={isSeeding}

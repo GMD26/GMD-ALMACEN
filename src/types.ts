@@ -4,6 +4,7 @@ export interface Product {
   descripcion: string;
   medida: string;
   unidad: string;
+  peso?: string; // Peso / Gramaje (e.g., 240 g/m²)
   precio: number;
   precioIva: number;
   costo: number;
@@ -70,4 +71,49 @@ export interface UserProfile {
   lastLogin: string;
 }
 
-export type ActiveTab = 'dashboard' | 'inventory' | 'entradas' | 'salidas' | 'pedidos' | 'reportes';
+export interface Customer {
+  id: string;
+  razonSocial: string;
+  rfcOrId?: string;
+  domicilioEntrega: string;
+  telefono: string;
+  email: string;
+  contactoNombre?: string;
+  createdAt?: string;
+}
+
+export interface RemisionItem {
+  id: string;
+  sku: string;
+  descripcion: string;
+  medida: string;
+  unidad: string;
+  peso?: string;
+  cantidad: number;
+  precioUnitario: number;
+  importe: number;
+}
+
+export interface Remision {
+  id: string;
+  folio: string;
+  fecha: string;
+  cliente: Customer;
+  items: RemisionItem[];
+  subtotal: number;
+  aplicaIva: boolean;
+  iva: number;
+  total: number;
+  observaciones: string;
+  vendedorNombre: string;
+  vendedorContacto?: string;
+  formaPago?: string;
+  condicionPago?: 'Contado' | 'Crédito';
+  fechaPago?: string;
+  firmaClienteUrl?: string;
+  estado: 'EMITIDA' | 'CANCELADA' | 'ENTREGADA';
+  descontoInventario?: boolean;
+  createdAt: string;
+}
+
+export type ActiveTab = 'portada' | 'dashboard' | 'inventory' | 'entradas' | 'salidas' | 'pedidos' | 'reportes' | 'remisiones' | 'clientes';

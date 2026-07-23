@@ -121,6 +121,22 @@ const rawProducts = [
   ["10643123","GERMAN ETCHING 310 g/m2 Fine Art","24\" x 12 m","RL","$4,186.00","$4,856.00","$3,885.00"]
 ];
 
+export function getPrecioConIva(p: Product): number {
+  if (p && p.precioIva && p.precioIva > 0) {
+    return p.precioIva;
+  }
+  return (p && p.precio) || 0;
+}
+
+export function extractPeso(desc: string): string {
+  if (!desc) return 'Estándar';
+  const grammageMatch = desc.match(/(\d+(?:\.\d+)?\s*(?:g\/m²|g\/m2|g|mil))/i);
+  if (grammageMatch) {
+    return grammageMatch[0].replace(/g\/m2/i, 'g/m²');
+  }
+  return 'Estándar';
+}
+
 export const INITIAL_PRODUCTS: Product[] = rawProducts.map((p, idx) => {
   const [sku, desc, medida, unidad, pStr, pIvaStr, cStr] = p;
   const precio = parsePrice(pStr);
@@ -129,13 +145,8 @@ export const INITIAL_PRODUCTS: Product[] = rawProducts.map((p, idx) => {
   
   const { categoria, ubicacion, defaultMin } = categorizeProduct(sku, desc);
 
-  // Intentionally set some stock levels low (e.g. 1 or 2) to demonstrate low stock alerts!
-  let cantidadActual = 12;
-  if (idx % 4 === 0) cantidadActual = 2; // Low stock alert!
-  else if (idx % 7 === 0) cantidadActual = 0; // Out of stock alert!
-  else if (idx % 3 === 0) cantidadActual = 18;
-  else if (idx % 5 === 0) cantidadActual = 4; // Low stock alert!
-  else cantidadActual = 25;
+  // Set initial stock level to 0 so users can enter inventory manually
+  const cantidadActual = 0;
 
   return {
     id: sku,
@@ -143,12 +154,13 @@ export const INITIAL_PRODUCTS: Product[] = rawProducts.map((p, idx) => {
     descripcion: desc,
     medida,
     unidad,
+    peso: extractPeso(desc),
     precio,
     precioIva,
     costo,
     cantidadActual,
     ubicacionAlmacen: ubicacion,
-    minStock: defaultMin,
+    minStock: 0,
     categoria,
     updatedAt: new Date().toISOString(),
     updatedBy: 'Sistema Grupo Más Digital'

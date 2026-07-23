@@ -19,6 +19,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    match /remisiones/{remisionId} {
+      allow read, write: if true;
+    }
+
     match /test/{docId} {
       allow read, write: if true;
     }

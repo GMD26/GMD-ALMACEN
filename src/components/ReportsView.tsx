@@ -231,10 +231,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredMovements.map((m) => {
+                filteredMovements.map((m, idx) => {
                   const isEntrada = m.tipo === 'ENTRADA';
                   return (
-                    <tr key={m.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={`${m.id}-${idx}`} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3 px-4 text-slate-500 text-[11px] whitespace-nowrap">
                         {new Date(m.timestamp).toLocaleString('es-MX')}
                       </td>
