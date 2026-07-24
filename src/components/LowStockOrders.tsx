@@ -11,7 +11,10 @@ import {
   Building2, 
   Clock,
   CheckCircle2,
-  ListOrdered
+  ListOrdered,
+  Search,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { Product, PurchaseOrder, PurchaseOrderItem, UserProfile } from '../types';
 import { generatePurchaseOrderPDF } from '../utils/pdfGenerator';
@@ -37,6 +40,12 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
   // Find products below or equal to min stock
   const lowStockProducts = products.filter(p => p.cantidadActual <= p.minStock);
 
+  // Custom added products that were manually searched
+  const [customSkus, setCustomSkus] = useState<string[]>([]);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [selectedSearchSku, setSelectedSearchSku] = useState('');
+  const [addQtyInput, setAddQtyInput] = useState<number>(5);
+
   // Selected SKUs map to quantity to order
   const [selectedItems, setSelectedItems] = useState<{ [sku: string]: { selected: boolean; qty: number } }>(() => {
     const initial: { [sku: string]: { selected: boolean; qty: number } } = {};
@@ -51,6 +60,40 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
   const [orderNotes, setNotes] = useState('Pedido urgente para reabastecimiento de almacén.');
   const [isCreating, setIsCreating] = useState(false);
   const [receivingOrderId, setReceivingOrderId] = useState<string | null>(null);
+
+  // Combine low stock products and manually added products
+  const displayProducts = [
+    ...lowStockProducts,
+    ...products.filter(p => customSkus.includes(p.sku) && !lowStockProducts.some(lsp => lsp.sku === p.sku))
+  ];
+
+  const handleSearchSkuChange = (query: string) => {
+    setProductSearchQuery(query);
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return;
+    const exactMatch = products.find(p => p.sku.toLowerCase() === trimmed);
+    if (exactMatch) {
+      setSelectedSearchSku(exactMatch.sku);
+    }
+  };
+
+  const handleAddCustomProduct = () => {
+    const targetSku = selectedSearchSku || products.find(p => p.sku.toLowerCase() === productSearchQuery.trim().toLowerCase())?.sku;
+    if (!targetSku) return;
+
+    if (!customSkus.includes(targetSku)) {
+      setCustomSkus(prev => [...prev, targetSku]);
+    }
+
+    setSelectedItems(prev => ({
+      ...prev,
+      [targetSku]: { selected: true, qty: addQtyInput || 5 }
+    }));
+
+    setProductSearchQuery('');
+    setSelectedSearchSku('');
+    setAddQtyInput(5);
+  };
 
   const toggleSelect = (sku: string) => {
     setSelectedItems(prev => {
@@ -71,7 +114,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
 
   const selectAll = () => {
     const next: { [sku: string]: { selected: boolean; qty: number } } = {};
-    lowStockProducts.forEach(p => {
+    displayProducts.forEach(p => {
       const existingQty = selectedItems[p.sku]?.qty || Math.max(1, (p.minStock * 2) - p.cantidadActual);
       next[p.sku] = { selected: true, qty: existingQty };
     });
@@ -80,14 +123,14 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
 
   const deselectAll = () => {
     const next: { [sku: string]: { selected: boolean; qty: number } } = {};
-    lowStockProducts.forEach(p => {
+    displayProducts.forEach(p => {
       next[p.sku] = { selected: false, qty: selectedItems[p.sku]?.qty || 5 };
     });
     setSelectedItems(next);
   };
 
   // Filter chosen items
-  const itemsToOrder: PurchaseOrderItem[] = lowStockProducts
+  const itemsToOrder: PurchaseOrderItem[] = displayProducts
     .filter(p => selectedItems[p.sku]?.selected)
     .map(p => {
       const qty = selectedItems[p.sku]?.qty || 1;
@@ -105,6 +148,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
     });
 
   const totalEstimatedCost = itemsToOrder.reduce((sum, item) => sum + (item.cantidadPedida * item.costoEstimado), 0);
+  const totalItemsCount = itemsToOrder.reduce((acc, i) => acc + i.cantidadPedida, 0);
 
   const handleGeneratePDF = () => {
     if (itemsToOrder.length === 0) return;
@@ -196,6 +240,62 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
         
         {/* Left Column: Reorder Checklist (2 cols) */}
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          {/* Product Searcher Bar */}
+          <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2">
+            <label className="block text-slate-800 font-bold text-xs">
+              Buscador de Productos (Catálogo de {products.length} SKUs):
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+              <div className="sm:col-span-6 relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Escriba SKU o nombre para buscar..."
+                  value={productSearchQuery}
+                  onChange={(e) => handleSearchSkuChange(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <select
+                  value={selectedSearchSku}
+                  onChange={(e) => setSelectedSearchSku(e.target.value)}
+                  className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium"
+                >
+                  <option value="">-- Seleccionar producto --</option>
+                  {products
+                    .filter(p => !productSearchQuery || p.sku.toLowerCase().includes(productSearchQuery.toLowerCase()) || p.descripcion.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                    .map((p, idx) => (
+                      <option key={`${p.sku}-${idx}`} value={p.sku}>
+                        [{p.sku}] - {p.descripcion.substring(0, 30)}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+
+              <div className="sm:col-span-3 flex items-center space-x-2">
+                <input
+                  type="number"
+                  min="1"
+                  value={addQtyInput}
+                  onChange={(e) => setAddQtyInput(parseInt(e.target.value) || 1)}
+                  className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-center font-bold text-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomProduct}
+                  disabled={!selectedSearchSku && !productSearchQuery}
+                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer disabled:opacity-50"
+                >
+                  <Plus className="w-3.5 h-3.5 text-red-400" />
+                  <span>Agregar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <h2 className="font-bold text-slate-900 text-base">Material por Reponer</h2>
@@ -220,14 +320,14 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
           </div>
 
           <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
-            {lowStockProducts.length === 0 ? (
+            {displayProducts.length === 0 ? (
               <div className="text-center py-12 text-slate-400 space-y-2">
                 <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
                 <p className="font-bold text-slate-700 text-sm">¡Inventario Excelente!</p>
-                <p className="text-xs text-slate-500">No hay productos por debajo del umbral mínimo de stock.</p>
+                <p className="text-xs text-slate-500">Use el buscador arriba para agregar productos al pedido de material.</p>
               </div>
             ) : (
-              lowStockProducts.map((p, idx) => {
+              displayProducts.map((p, idx) => {
                 const isSelected = selectedItems[p.sku]?.selected ?? true;
                 const currentQty = selectedItems[p.sku]?.qty ?? Math.max(1, (p.minStock * 2) - p.cantidadActual);
 

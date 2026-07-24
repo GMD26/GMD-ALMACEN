@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ExternalLink, ShoppingCart, Plus, Search, Check, CheckSquare, Square, Trash2, Package, Truck, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ExternalLink, ShoppingCart, Plus, Search, Check, CheckSquare, Square, Trash2, Package, Truck, AlertCircle, FileSpreadsheet, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { PedidoMercadoLibre } from '../types';
 
 interface PedidosMercadoLibreViewProps {
@@ -19,6 +20,8 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form State
   const [numPedidoML, setNumPedidoML] = useState('');
@@ -35,6 +38,91 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
     p.clienteML.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.descripcionProducto.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportMessage('Procesando archivo Excel...');
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+      if (jsonRows.length === 0) {
+        setImportMessage('El archivo Excel está vacío.');
+        setTimeout(() => setImportMessage(null), 3000);
+        return;
+      }
+
+      let importedCount = 0;
+      for (const row of jsonRows) {
+        // Try flexibly matching common ML Excel columns
+        const numPedido = String(
+          row['# Pedido ML'] ||
+          row['# Venta'] ||
+          row['Número de venta'] ||
+          row['N° de venta'] ||
+          row['Orden'] ||
+          row['ID Venta'] ||
+          row['Pedido'] ||
+          `ML-${Date.now().toString().slice(-6)}-${importedCount + 1}`
+        ).trim();
+
+        const cliente = String(
+          row['Cliente ML'] ||
+          row['Cliente'] ||
+          row['Comprador'] ||
+          row['Nombre'] ||
+          'Cliente ML'
+        ).trim();
+
+        const descripcion = String(
+          row['Producto Requerido'] ||
+          row['Producto'] ||
+          row['Título'] ||
+          row['Descripcion'] ||
+          row['Descripción'] ||
+          row['Publicación'] ||
+          'Producto ML'
+        ).trim();
+
+        const cantNum = parseInt(
+          row['Cantidad'] || row['Unidades'] || row['Cant'] || '1',
+          10
+        ) || 1;
+
+        const kronalineBool = String(row['Pedido a Kronaline'] || row['Kronaline'] || '').toUpperCase().includes('SI') || String(row['Pedido a Kronaline'] || row['Kronaline'] || '').toUpperCase().includes('TRUE');
+        const entregadoBool = String(row['Entregado'] || '').toUpperCase().includes('SI') || String(row['Entregado'] || '').toUpperCase().includes('TRUE');
+        const notaStr = String(row['Notas'] || row['Observaciones'] || 'Importado por Excel ML').trim();
+
+        if (descripcion) {
+          await onAddPedidoML({
+            numPedidoML: numPedido,
+            clienteML: cliente,
+            descripcionProducto: descripcion,
+            cantidad: cantNum,
+            pedidoAKronaline: kronalineBool,
+            entregado: entregadoBool,
+            fecha: new Date().toISOString(),
+            notas: notaStr
+          });
+          importedCount++;
+        }
+      }
+
+      setImportMessage(`¡Se importaron ${importedCount} pedidos de Mercado Libre exitosamente!`);
+      setTimeout(() => setImportMessage(null), 4000);
+    } catch (err) {
+      console.error(err);
+      setImportMessage('Error al leer el archivo Excel. Verifique el formato.');
+      setTimeout(() => setImportMessage(null), 4000);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +173,24 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleExcelImport}
+            accept=".xlsx, .xls, .csv"
+            className="hidden"
+          />
+
+          {/* Import Excel Button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+            <span>Importar Excel ML</span>
+          </button>
+
           {/* External ML Link Button */}
           <a
             href={MERCADO_LIBRE_OMNI_URL}
@@ -105,6 +211,14 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
           </button>
         </div>
       </div>
+
+      {/* Import Notification Banner */}
+      {importMessage && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl flex items-center space-x-3 text-amber-900 text-xs font-bold animate-fadeIn">
+          <FileSpreadsheet className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <span>{importMessage}</span>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">

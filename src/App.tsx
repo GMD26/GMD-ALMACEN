@@ -543,6 +543,17 @@ export default function App() {
     }
   };
 
+  const handleDeleteRemision = async (id: string) => {
+    try {
+      const remRef = doc(db, 'remisiones', id);
+      await deleteDoc(remRef);
+      setRemisiones(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `remisiones/${id}`);
+      throw err;
+    }
+  };
+
   const handleSaveRemision = async (remisionData: Omit<Remision, 'id'>, discountStock: boolean) => {
     try {
       const remisionesRef = collection(db, 'remisiones');
@@ -812,6 +823,7 @@ export default function App() {
           <Portada
             onOpenInventario={() => setActiveTab('dashboard')}
             onOpenRemision={() => setActiveTab('remisiones')}
+            onOpenListasPrecios={() => setActiveTab('listas-precios')}
             totalProductsCount={products.length}
           />
         )}
@@ -823,6 +835,7 @@ export default function App() {
             remisiones={remisiones}
             userProfile={userProfile}
             onSaveRemision={handleSaveRemision}
+            onDeleteRemision={handleDeleteRemision}
             onAddCustomer={handleAddCustomer}
             onDeleteCustomer={handleDeleteCustomer}
             onBackToPortada={() => setActiveTab('portada')}

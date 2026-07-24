@@ -33,9 +33,16 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
 
   // Categories list
   const categoriesList = Array.from(new Set([
+    'Precio',
+    'Precio más IVA',
+    'Precio descuento',
+    '1.14',
+    '1.16',
+    '1.2798',
+    'Costo',
     'Fine Art / Fotográfico',
     'Plotter Gran Formato',
-    'Papepeles Especiales',
+    'Papeles Especiales',
     'Lonas y Viniles',
     'Tintas y Consumibles',
     ...listasPrecios.map(p => p.categoria),

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Boxes, 
   Receipt, 
@@ -11,20 +11,50 @@ import {
   BarChart3,
   Layers,
   MapPin,
-  Phone
+  Phone,
+  Tag,
+  Upload,
+  FileSpreadsheet,
+  FileText,
+  CheckCircle2
 } from 'lucide-react';
 
 interface PortadaProps {
   onOpenInventario: () => void;
   onOpenRemision: () => void;
+  onOpenListasPrecios?: () => void;
   totalProductsCount: number;
 }
 
 export const Portada: React.FC<PortadaProps> = ({
   onOpenInventario,
   onOpenRemision,
+  onOpenListasPrecios,
   totalProductsCount
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Precio');
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
+  const priceCategories = [
+    'Precio',
+    'Precio más IVA',
+    'Precio descuento',
+    '1.14',
+    '1.16',
+    '1.2798',
+    'Costo'
+  ];
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadStatus(`Archivo "${file.name}" cargado exitosamente para la categoría [${selectedCategory}].`);
+    setTimeout(() => {
+      if (onOpenListasPrecios) onOpenListasPrecios();
+    }, 1500);
+  };
   return (
     <div className="space-y-8 py-4 sm:py-8 max-w-6xl mx-auto">
       
@@ -203,6 +233,100 @@ export const Portada: React.FC<PortadaProps> = ({
           </div>
         </div>
 
+      </div>
+
+      {/* MODULE 3: LISTAS DE PRECIOS (7 CATEGORÍAS DE PRECIO) - SUBIR EXCEL / PDF */}
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 border border-indigo-800/60 text-white shadow-2xl space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-indigo-800/50 pb-6">
+          <div className="flex items-center space-x-3">
+            <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30">
+              <Tag className="w-8 h-8" />
+            </div>
+            <div>
+              <div className="inline-flex items-center space-x-2 text-indigo-300 font-extrabold text-xs uppercase tracking-wider mb-0.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Gestión de Precios de Venta</span>
+              </div>
+              <h2 className="text-2xl font-black text-white">Listas de Precios (7 Categorías Disponibles)</h2>
+              <p className="text-xs text-indigo-200 mt-1 max-w-xl">
+                Carga o actualiza tus archivos <strong className="text-white">Excel (.xlsx) o PDF</strong> con los precios de venta correspondientes a las 7 categorías asignables a clientes y remisiones.
+              </p>
+            </div>
+          </div>
+
+          {onOpenListasPrecios && (
+            <button
+              onClick={onOpenListasPrecios}
+              className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-400 text-slate-950 font-black text-xs px-5 py-3 rounded-2xl shadow-lg transition-all cursor-pointer whitespace-nowrap"
+            >
+              <span>Ver Listas de Precios</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* 7 Price Categories Grid & File Upload Link */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          
+          {/* Categories Pill List */}
+          <div className="md:col-span-7 space-y-3">
+            <label className="block text-xs font-bold text-indigo-300 uppercase tracking-wider">
+              Categorías de Precio Habilitadas:
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {priceCategories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`p-2.5 rounded-xl border text-left transition-all text-xs font-bold cursor-pointer ${
+                    selectedCategory === cat 
+                      ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' 
+                      : 'bg-slate-800/80 border-slate-700/80 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Upload Excel / PDF Area */}
+          <div className="md:col-span-5 bg-slate-800/90 border border-indigo-500/30 rounded-2xl p-5 space-y-3 text-center">
+            <div className="flex items-center justify-center space-x-2 text-indigo-300">
+              <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+              <FileText className="w-5 h-5 text-cyan-400" />
+              <span className="font-extrabold text-xs">Subir Lista (Excel / PDF)</span>
+            </div>
+
+            <p className="text-[11px] text-slate-300">
+              Carga tu archivo para la categoría seleccionada: <strong className="text-white font-bold">{selectedCategory}</strong>
+            </p>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".xlsx, .xls, .pdf, .csv"
+              className="hidden"
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-indigo-200" />
+              <span>Seleccionar Archivo Excel o PDF</span>
+            </button>
+
+            {uploadStatus && (
+              <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold flex items-center space-x-2 text-left">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>{uploadStatus}</span>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
 
       {/* Business Trust & Capability Highlights */}

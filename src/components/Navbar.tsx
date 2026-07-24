@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Boxes, 
   LayoutDashboard, 
@@ -15,7 +15,14 @@ import {
   ShoppingBag,
   UserCheck,
   Tag,
-  ShoppingCart
+  ShoppingCart,
+  GripVertical,
+  SlidersHorizontal,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  Check,
+  Move
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
@@ -30,6 +37,31 @@ interface NavbarProps {
   lowStockCount: number;
 }
 
+const DEFAULT_TAB_ORDER: ActiveTab[] = [
+  'portada',
+  'remisiones',
+  'dashboard',
+  'inventory',
+  'existencias',
+  'entradas',
+  'salidas',
+  'pedidos-especiales',
+  'pedidos-ml',
+  'pedidos',
+  'reportes-vendedor',
+  'listas-precios',
+  'reportes'
+];
+
+interface TabDefinition {
+  id: ActiveTab;
+  label: string;
+  icon: React.ReactNode;
+  activeClass: string;
+  inactiveClass: string;
+  hasBadge?: boolean;
+}
+
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
@@ -39,6 +71,177 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   lowStockCount
 }) => {
+  // Tab order state from localStorage or default
+  const [tabsOrder, setTabsOrder] = useState<ActiveTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('gmd_custom_tab_order_v1');
+      if (saved) {
+        const parsed: ActiveTab[] = JSON.parse(saved);
+        const validSaved = parsed.filter(id => DEFAULT_TAB_ORDER.includes(id));
+        const missing = DEFAULT_TAB_ORDER.filter(id => !validSaved.includes(id));
+        return [...validSaved, ...missing];
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return DEFAULT_TAB_ORDER;
+  });
+
+  // Drag & drop state for navbar items
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  
+  // Modal for mobile / explicit reordering
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+  // Tab Definitions Dictionary
+  const tabDefs: Record<string, TabDefinition> = {
+    'portada': {
+      id: 'portada',
+      label: 'Portada',
+      icon: <Home className="w-3.5 h-3.5 text-cyan-400" />,
+      activeClass: 'bg-slate-700 text-white font-black ring-1 ring-slate-500',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    },
+    'remisiones': {
+      id: 'remisiones',
+      label: 'Remisión',
+      icon: <Receipt className="w-3.5 h-3.5" />,
+      activeClass: 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20',
+      inactiveClass: 'text-emerald-400 hover:bg-slate-800 hover:text-emerald-300 font-bold'
+    },
+    'dashboard': {
+      id: 'dashboard',
+      label: 'Resumen',
+      icon: <LayoutDashboard className="w-3.5 h-3.5" />,
+      activeClass: 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    },
+    'inventory': {
+      id: 'inventory',
+      label: 'SKUs',
+      icon: <Boxes className="w-3.5 h-3.5" />,
+      activeClass: 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    },
+    'existencias': {
+      id: 'existencias',
+      label: 'Existencias Disponibles',
+      icon: <Lock className="w-3.5 h-3.5" />,
+      activeClass: 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-400/20',
+      inactiveClass: 'text-amber-300 hover:bg-slate-800 hover:text-amber-200'
+    },
+    'entradas': {
+      id: 'entradas',
+      label: 'Entradas',
+      icon: <ArrowDownToLine className="w-3.5 h-3.5" />,
+      activeClass: 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    },
+    'salidas': {
+      id: 'salidas',
+      label: 'Salidas',
+      icon: <ArrowUpFromLine className="w-3.5 h-3.5" />,
+      activeClass: 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    },
+    'pedidos-especiales': {
+      id: 'pedidos-especiales',
+      label: 'Pedidos Especiales',
+      icon: <ShoppingBag className="w-3.5 h-3.5" />,
+      activeClass: 'bg-cyan-400 text-slate-950 font-black shadow-md shadow-cyan-400/20',
+      inactiveClass: 'text-cyan-300 hover:bg-slate-800 hover:text-cyan-200'
+    },
+    'pedidos-ml': {
+      id: 'pedidos-ml',
+      label: 'Mercado Libre',
+      icon: <ShoppingCart className="w-3.5 h-3.5" />,
+      activeClass: 'bg-yellow-400 text-slate-950 font-black shadow-md shadow-yellow-400/20',
+      inactiveClass: 'text-yellow-300 hover:bg-slate-800 hover:text-yellow-200'
+    },
+    'pedidos': {
+      id: 'pedidos',
+      label: 'Pedidos Material',
+      icon: <AlertTriangle className="w-3.5 h-3.5" />,
+      activeClass: 'bg-red-500 text-white font-bold shadow-md shadow-red-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white',
+      hasBadge: true
+    },
+    'reportes-vendedor': {
+      id: 'reportes-vendedor',
+      label: 'Reporte Vendedor',
+      icon: <UserCheck className="w-3.5 h-3.5" />,
+      activeClass: 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    },
+    'listas-precios': {
+      id: 'listas-precios',
+      label: 'Listas de Precios',
+      icon: <Tag className="w-3.5 h-3.5" />,
+      activeClass: 'bg-purple-500 text-white font-bold shadow-md shadow-purple-500/20',
+      inactiveClass: 'text-purple-300 hover:bg-slate-800 hover:text-purple-200'
+    },
+    'reportes': {
+      id: 'reportes',
+      label: 'Reportes e Historial',
+      icon: <FileSpreadsheet className="w-3.5 h-3.5" />,
+      activeClass: 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20',
+      inactiveClass: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    }
+  };
+
+  // Drag Handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', index.toString());
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null) return;
+    const newOrder = [...tabsOrder];
+    const [movedItem] = newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, movedItem);
+
+    setTabsOrder(newOrder);
+    localStorage.setItem('gmd_custom_tab_order_v1', JSON.stringify(newOrder));
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleMoveTab = (fromIdx: number, direction: 'up' | 'down') => {
+    const toIdx = direction === 'up' ? fromIdx - 1 : fromIdx + 1;
+    if (toIdx < 0 || toIdx >= tabsOrder.length) return;
+    const newOrder = [...tabsOrder];
+    const [movedItem] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, movedItem);
+    setTabsOrder(newOrder);
+    localStorage.setItem('gmd_custom_tab_order_v1', JSON.stringify(newOrder));
+  };
+
+  const handleResetOrder = () => {
+    setTabsOrder(DEFAULT_TAB_ORDER);
+    localStorage.removeItem('gmd_custom_tab_order_v1');
+  };
+
+  // Normalize active tab alias checks
+  const isTabActive = (tabId: ActiveTab) => {
+    if (activeTab === tabId) return true;
+    if (tabId === 'existencias' && activeTab === 'existencias_disponibles') return true;
+    if (tabId === 'listas-precios' && activeTab === 'listas_precios') return true;
+    if (tabId === 'pedidos-especiales' && activeTab === 'pedidos_especiales') return true;
+    if (tabId === 'pedidos-ml' && activeTab === 'pedidos_ml') return true;
+    if (tabId === 'reportes-vendedor' && activeTab === 'reporte_vendedor') return true;
+    return false;
+  };
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -59,8 +262,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* User Auth Info */}
-          <div className="flex items-center space-x-3">
+          {/* User Auth Info & Tab Reorder Button */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Customize Tabs Order Trigger Button */}
+            <button
+              onClick={() => setIsConfigOpen(true)}
+              className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs font-bold transition-all cursor-pointer"
+              title="Organizar o reordenar pestañas"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Organizar Pestañas</span>
+            </button>
+
             {user ? (
               <div className="flex items-center space-x-3 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60">
                 {user.photoURL ? (
@@ -104,184 +317,136 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Navigation Tabs Bar */}
-        <nav className="flex space-x-1 overflow-x-auto py-2 scrollbar-none border-t border-slate-800/80">
-          
-          {/* Portada Principal */}
-          <button
-            onClick={() => setActiveTab('portada')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'portada'
-                ? 'bg-slate-700 text-white font-black ring-1 ring-slate-500'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Home className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Portada</span>
-          </button>
+        {/* Dynamic & Draggable Navigation Tabs Bar */}
+        <nav className="flex space-x-1 overflow-x-auto py-2 scrollbar-none border-t border-slate-800/80 items-center">
+          {tabsOrder.map((tabId, idx) => {
+            const def = tabDefs[tabId];
+            if (!def) return null;
 
-          <div className="h-4 w-px bg-slate-800 self-center mx-1" />
+            const active = isTabActive(tabId);
+            const isDragging = draggedIndex === idx;
+            const isOver = dragOverIndex === idx;
 
-          {/* Botón Remisión Directo */}
-          <button
-            onClick={() => setActiveTab('remisiones')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'remisiones'
-                ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
-                : 'text-emerald-400 hover:bg-slate-800 hover:text-emerald-300 font-bold'
-            }`}
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            <span>Remisión</span>
-          </button>
+            return (
+              <button
+                key={tabId}
+                draggable
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDrop={(e) => handleDrop(e, idx)}
+                onDragEnd={() => {
+                  setDraggedIndex(null);
+                  setDragOverIndex(null);
+                }}
+                onClick={() => setActiveTab(tabId)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-grab active:cursor-grabbing select-none group relative ${
+                  active ? def.activeClass : def.inactiveClass
+                } ${isDragging ? 'opacity-30 scale-95 border-2 border-dashed border-cyan-400' : ''} ${
+                  isOver ? 'ring-2 ring-cyan-400 scale-105 bg-slate-800' : ''
+                }`}
+                title={`Pestaña "${def.label}" (Arrastre horizontalmente para reordenar)`}
+              >
+                <GripVertical className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity -ml-1" />
+                {def.icon}
+                <span>{def.label}</span>
 
-          <div className="h-4 w-px bg-slate-800 self-center mx-1" />
-
-          {/* Sección Control de Inventario GMD 26 */}
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'dashboard'
-                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" />
-            <span>Resumen</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('inventory')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'inventory'
-                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Boxes className="w-3.5 h-3.5" />
-            <span>SKUs</span>
-          </button>
-
-          {/* Existencias Disponibles (Neto + Apartados) */}
-          <button
-            onClick={() => setActiveTab('existencias')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'existencias'
-                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-400/20'
-                : 'text-amber-300 hover:bg-slate-800 hover:text-amber-200'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>Existencias Disponibles</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('entradas')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'entradas'
-                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <ArrowDownToLine className="w-3.5 h-3.5" />
-            <span>Entradas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('salidas')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'salidas'
-                ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <ArrowUpFromLine className="w-3.5 h-3.5" />
-            <span>Salidas</span>
-          </button>
-
-          {/* Pedidos Especiales */}
-          <button
-            onClick={() => setActiveTab('pedidos-especiales')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'pedidos-especiales'
-                ? 'bg-cyan-400 text-slate-950 font-black shadow-md shadow-cyan-400/20'
-                : 'text-cyan-300 hover:bg-slate-800 hover:text-cyan-200'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Pedidos Especiales</span>
-          </button>
-
-          {/* Mercado Libre */}
-          <button
-            onClick={() => setActiveTab('pedidos-ml')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'pedidos-ml'
-                ? 'bg-yellow-400 text-slate-950 font-black shadow-md shadow-yellow-400/20'
-                : 'text-yellow-300 hover:bg-slate-800 hover:text-yellow-200'
-            }`}
-          >
-            <ShoppingCart className="w-3.5 h-3.5" />
-            <span>Mercado Libre</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('pedidos')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all relative ${
-              activeTab === 'pedidos'
-                ? 'bg-red-500 text-white font-bold shadow-md shadow-red-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>Pedidos Material</span>
-            {lowStockCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold bg-white text-red-600 rounded-full animate-pulse">
-                {lowStockCount}
-              </span>
-            )}
-          </button>
-
-          {/* Reporte por Vendedor */}
-          <button
-            onClick={() => setActiveTab('reportes-vendedor')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'reportes-vendedor'
-                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>Reporte Vendedor</span>
-          </button>
-
-          {/* Listas de Precios */}
-          <button
-            onClick={() => setActiveTab('listas-precios')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'listas-precios'
-                ? 'bg-purple-500 text-white font-bold shadow-md shadow-purple-500/20'
-                : 'text-purple-300 hover:bg-slate-800 hover:text-purple-200'
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5" />
-            <span>Listas de Precios</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('reportes')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeTab === 'reportes'
-                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Reportes e Historial</span>
-          </button>
+                {def.hasBadge && lowStockCount > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold bg-white text-red-600 rounded-full animate-pulse">
+                    {lowStockCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
       </div>
+
+      {/* REORDER TABS CONFIGURATION MODAL */}
+      {isConfigOpen && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-slate-900">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <Move className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Reorganizar Orden de Pestañas</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Acomode las pestañas según su flujo de trabajo. También puede arrastrarlas directamente en la barra.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsConfigOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {tabsOrder.map((tabId, idx) => {
+                const def = tabDefs[tabId];
+                if (!def) return null;
+
+                return (
+                  <div
+                    key={tabId}
+                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xs font-bold text-slate-400 w-5">{idx + 1}.</span>
+                      <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
+                        {def.icon}
+                      </div>
+                      <span className="font-bold text-xs text-slate-900">{def.label}</span>
+                    </div>
+
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => handleMoveTab(idx, 'up')}
+                        disabled={idx === 0}
+                        className="p-1.5 bg-white border border-slate-200 hover:bg-slate-200 text-slate-700 rounded-lg transition-all disabled:opacity-30 cursor-pointer"
+                        title="Mover arriba"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => handleMoveTab(idx, 'down')}
+                        disabled={idx === tabsOrder.length - 1}
+                        className="p-1.5 bg-white border border-slate-200 hover:bg-slate-200 text-slate-700 rounded-lg transition-all disabled:opacity-30 cursor-pointer"
+                        title="Mover abajo"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                onClick={handleResetOrder}
+                className="flex items-center space-x-1.5 text-xs text-slate-600 hover:text-red-600 font-bold px-3 py-2 rounded-xl hover:bg-red-50 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restablecer Orden Original</span>
+              </button>
+
+              <button
+                onClick={() => setIsConfigOpen(false)}
+                className="flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Guardar y Aplicar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
+
 

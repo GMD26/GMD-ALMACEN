@@ -52,8 +52,9 @@ export const ExistenciasDisponiblesView: React.FC<ExistenciasDisponiblesViewProp
   });
 
   const filteredProducts = productsWithNetStock.filter(p =>
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
+    p.disponibleNeto > 0 &&
+    (p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const filteredApartados = activeApartados.filter(a => {

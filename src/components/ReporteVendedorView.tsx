@@ -17,12 +17,30 @@ export const ReporteVendedorView: React.FC<ReporteVendedorViewProps> = ({
 }) => {
   const [selectedVendor, setSelectedVendor] = useState<'Luis' | 'Manuel' | 'César'>('Luis');
 
-  // Filter remisiones by vendor name match (case insensitive match)
-  const vendorRemisiones = remisiones.filter(r => {
-    const name = (r.vendedorNombre || '').toLowerCase();
-    return name.includes(selectedVendor.toLowerCase());
+  // Calculate Summary for ALL Vendors
+  const VENDORS_LIST = ['Luis', 'Manuel', 'César', 'Mostrador', 'Mercado Libre'];
+
+  const allVendorsSummary = VENDORS_LIST.map(v => {
+    const rems = remisiones.filter(r => (r.vendedorNombre || '').toLowerCase().includes(v.toLowerCase()));
+    const totalVentas = rems.reduce((acc, r) => acc + (r.total || 0), 0);
+    const countRemisiones = rems.length;
+    const aparts = apartados.filter(a => a.nombre.toLowerCase() === v.toLowerCase());
+    const countApartados = aparts.reduce((acc, a) => acc + (a.cantidadApartada || 0), 0);
+    const pedsEsp = pedidosEspeciales.filter(p => p.nombre.toLowerCase() === v.toLowerCase());
+    const countPedsEsp = pedsEsp.length;
+
+    return {
+      vendor: v,
+      totalVentas,
+      countRemisiones,
+      countApartados,
+      countPedsEsp
+    };
   });
 
+  const granTotalVentas = allVendorsSummary.reduce((acc, s) => acc + s.totalVentas, 0);
+
+  const vendorRemisiones = remisiones.filter(r => (r.vendedorNombre || '').toLowerCase().includes(selectedVendor.toLowerCase()));
   const totalMontoRemisiones = vendorRemisiones.reduce((acc, r) => acc + (r.total || 0), 0);
 
   // Filter apartados by vendor name
@@ -58,7 +76,7 @@ export const ReporteVendedorView: React.FC<ReporteVendedorViewProps> = ({
 
         {/* Vendor Selector Dropdown (Luis, Manuel, César) */}
         <div className="flex items-center space-x-2 bg-slate-800 p-1.5 rounded-xl border border-slate-700">
-          <span className="text-xs text-slate-300 font-bold px-2">Vendedor:</span>
+          <span className="text-xs text-slate-300 font-bold px-2">Detalle de:</span>
           <select
             value={selectedVendor}
             onChange={(e) => setSelectedVendor(e.target.value as 'Luis' | 'Manuel' | 'César')}
@@ -68,6 +86,65 @@ export const ReporteVendedorView: React.FC<ReporteVendedorViewProps> = ({
             <option value="Manuel">Manuel</option>
             <option value="César">César</option>
           </select>
+        </div>
+      </div>
+
+      {/* Resumen Global Ventas por Vendedor (Luis, Manuel, César, Mostrador, Mercado Libre) */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center space-x-2">
+            <DollarSign className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-extrabold text-slate-900 text-sm">Resumen de Ventas Totales por Vendedor</h2>
+          </div>
+          <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+            Gran Total: ${granTotalVentas.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 font-extrabold border-b border-slate-200">
+                <th className="p-2.5">Ejecutivo / Vendedor</th>
+                <th className="p-2.5 text-center">Remisiones</th>
+                <th className="p-2.5 text-center">Apartados (pzas)</th>
+                <th className="p-2.5 text-center">Pedidos Esp.</th>
+                <th className="p-2.5 text-right">Ventas Totales ($)</th>
+                <th className="p-2.5 text-center">Participación</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {allVendorsSummary.map((s) => {
+                const percentage = granTotalVentas > 0 ? (s.totalVentas / granTotalVentas) * 100 : 0;
+                const isSelected = s.vendor.toLowerCase() === selectedVendor.toLowerCase();
+
+                return (
+                  <tr key={s.vendor} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-cyan-50/50' : ''}`}>
+                    <td className="p-2.5 font-bold text-slate-900 flex items-center space-x-1.5">
+                      <span className={`w-2 h-2 rounded-full ${s.totalVentas > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                      <span>{s.vendor}</span>
+                    </td>
+                    <td className="p-2.5 text-center font-semibold text-slate-700">{s.countRemisiones}</td>
+                    <td className="p-2.5 text-center font-semibold text-amber-700">{s.countApartados}</td>
+                    <td className="p-2.5 text-center font-semibold text-cyan-800">{s.countPedsEsp}</td>
+                    <td className="p-2.5 text-right font-black text-slate-900">
+                      ${s.totalVentas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5 text-center w-36">
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 bg-slate-200 h-2 rounded-full overflow-hidden">
+                          <div className="bg-cyan-600 h-full rounded-full" style={{ width: `${percentage}%` }}></div>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-600 w-8 text-right">
+                          {percentage.toFixed(0)}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 

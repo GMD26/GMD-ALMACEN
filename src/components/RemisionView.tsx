@@ -38,6 +38,7 @@ interface RemisionViewProps {
   remisiones: Remision[];
   userProfile: UserProfile | null;
   onSaveRemision: (remision: Omit<Remision, 'id'>, discountStock: boolean) => Promise<string>;
+  onDeleteRemision?: (id: string) => Promise<void>;
   onAddCustomer: (customer: Omit<Customer, 'id'>) => Promise<void>;
   onDeleteCustomer: (id: string) => Promise<void>;
   onBackToPortada: () => void;
@@ -49,6 +50,7 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
   remisiones,
   userProfile,
   onSaveRemision,
+  onDeleteRemision,
   onAddCustomer,
   onDeleteCustomer,
   onBackToPortada
@@ -373,6 +375,14 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          <button
+            onClick={() => setIsHistoryOpen(true)}
+            className="flex items-center space-x-1.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 font-bold text-xs px-3 py-2 rounded-xl border border-cyan-700/60 transition-colors cursor-pointer"
+          >
+            <FileCheck className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Historial ({remisiones.length})</span>
+          </button>
+
           <button
             onClick={() => setIsCustomersModalOpen(true)}
             className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-colors cursor-pointer"
@@ -957,6 +967,89 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
           handleAddItem(prod);
         }}
       />
+
+      {/* REMISIONES HISTORY MODAL */}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <Receipt className="w-5 h-5 text-cyan-600" />
+                <h3 className="font-extrabold text-slate-900 text-base">Historial de Remisiones Guardadas</h3>
+                <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {remisiones.length} emitidas
+                </span>
+              </div>
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {remisiones.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-xs">
+                  No hay remisiones guardadas registradas.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <th className="p-2.5">Folio</th>
+                        <th className="p-2.5">Fecha</th>
+                        <th className="p-2.5">Cliente</th>
+                        <th className="p-2.5">Vendedor</th>
+                        <th className="p-2.5 text-right">Total</th>
+                        <th className="p-2.5 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {remisiones.map((r) => (
+                        <tr key={r.id} className="hover:bg-slate-50">
+                          <td className="p-2.5 font-bold text-cyan-800">{r.folio}</td>
+                          <td className="p-2.5 text-slate-600">{r.fecha}</td>
+                          <td className="p-2.5 text-slate-900 font-medium">{r.cliente?.razonSocial || 'Cliente General'}</td>
+                          <td className="p-2.5 text-slate-600">{r.vendedorNombre || 'General'}</td>
+                          <td className="p-2.5 text-right font-black text-emerald-700">
+                            ${(r.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {onDeleteRemision && (
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`¿Confirma eliminar la remisión ${r.folio}?`)) {
+                                    await onDeleteRemision(r.id);
+                                  }
+                                }}
+                                className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Eliminar remisión"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cerrar Ventana
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

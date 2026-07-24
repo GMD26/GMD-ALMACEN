@@ -34,6 +34,14 @@ export const StockInView: React.FC<StockInViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Multi-product batch list state
+  const [batchItems, setBatchItems] = useState<Array<{
+    product: Product;
+    quantity: number;
+    cost: number;
+    location: string;
+  }>>([]);
+
   // Checkbox Selection State for Deleting
   const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
 
@@ -51,6 +59,17 @@ export const StockInView: React.FC<StockInViewProps> = ({
     }
   }, [initialProduct, products]);
 
+  // Auto SKU match when typing in searchQuery
+  const handleSearchQueryChange = (query: string) => {
+    setSearchQuery(query);
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return;
+    const exactMatch = products.find(p => p.sku.toLowerCase() === trimmed);
+    if (exactMatch) {
+      setSelectedSku(exactMatch.sku);
+    }
+  };
+
   useEffect(() => {
     if (selectedProduct) {
       setLocation(selectedProduct.ubicacionAlmacen);
@@ -63,25 +82,66 @@ export const StockInView: React.FC<StockInViewProps> = ({
     p.descripcion.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleAddCurrentToBatch = () => {
+    if (!selectedProduct || quantity <= 0) return;
+    
+    // Check if already in batch
+    const existingIndex = batchItems.findIndex(item => item.product.sku === selectedProduct.sku);
+    if (existingIndex >= 0) {
+      const updated = [...batchItems];
+      updated[existingIndex].quantity += quantity;
+      setBatchItems(updated);
+    } else {
+      setBatchItems(prev => [
+        ...prev,
+        {
+          product: selectedProduct,
+          quantity,
+          cost,
+          location: location || selectedProduct.ubicacionAlmacen
+        }
+      ]);
+    }
+
+    setSuccessMessage(`Agregado a la lista: ${quantity} x ${selectedProduct.sku}`);
+    setTimeout(() => setSuccessMessage(null), 2500);
+  };
+
+  const handleRemoveFromBatch = (index: number) => {
+    setBatchItems(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProduct || quantity <= 0) return;
+    
+    // Prepare list of items to submit
+    const itemsToSubmit = batchItems.length > 0 ? batchItems : (selectedProduct && quantity > 0 ? [{
+      product: selectedProduct,
+      quantity,
+      cost,
+      location: location || selectedProduct.ubicacionAlmacen
+    }] : []);
+
+    if (itemsToSubmit.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      await onRecordStockIn(
-        selectedProduct,
-        quantity,
-        supplierRef || 'Entrada Directa',
-        location || selectedProduct.ubicacionAlmacen,
-        notes,
-        cost
-      );
+      for (const item of itemsToSubmit) {
+        await onRecordStockIn(
+          item.product,
+          item.quantity,
+          supplierRef || 'Entrada Directa',
+          item.location || item.product.ubicacionAlmacen,
+          notes,
+          item.cost
+        );
+      }
 
-      setSuccessMessage(`¡Entrada de ${quantity} ${selectedProduct.unidad} de SKU ${selectedProduct.sku} registrada con éxito!`);
+      setSuccessMessage(`¡Entrada registrada con éxito (${itemsToSubmit.length} producto(s))!`);
       setTimeout(() => setSuccessMessage(null), 4000);
 
       // Reset
+      setBatchItems([]);
       setQuantity(10);
       setNotes('Recepción de material.');
     } catch (err) {
@@ -162,15 +222,15 @@ export const StockInView: React.FC<StockInViewProps> = ({
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Filtrar lista por SKU o nombre..."
+                  placeholder="Escriba SKU para auto-seleccionar o busque por nombre..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchQueryChange(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                 />
               </div>
 
               <select
-                required
+                required={batchItems.length === 0}
                 value={selectedSku}
                 onChange={(e) => setSelectedSku(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-slate-900 text-xs bg-slate-50"
@@ -205,7 +265,7 @@ export const StockInView: React.FC<StockInViewProps> = ({
                 <label className="block text-slate-700 font-bold mb-1">Cantidad a Ingresar *</label>
                 <input
                   type="number"
-                  required
+                  required={batchItems.length === 0}
                   min="1"
                   value={quantity}
                   onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
@@ -225,6 +285,57 @@ export const StockInView: React.FC<StockInViewProps> = ({
                 />
               </div>
             </div>
+
+            {/* Add to batch button */}
+            <button
+              type="button"
+              onClick={handleAddCurrentToBatch}
+              disabled={!selectedProduct || quantity <= 0}
+              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-emerald-300 font-bold text-xs rounded-xl border border-emerald-500/30 shadow-sm transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center space-x-2"
+            >
+              <PackagePlus className="w-4 h-4 text-emerald-400" />
+              <span>+ Agregar a lista de entrada múltiple</span>
+            </button>
+
+            {/* Batch items list box */}
+            {batchItems.length > 0 && (
+              <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                  <span>Lista de productos a ingresar ({batchItems.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => setBatchItems([])}
+                    className="text-[10px] text-red-600 hover:underline cursor-pointer"
+                  >
+                    Vaciar lista
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {batchItems.map((item, idx) => (
+                    <div key={idx} className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between text-[11px]">
+                      <div className="truncate max-w-[170px]">
+                        <span className="font-bold text-slate-900">[{item.product.sku}]</span>{' '}
+                        <span className="text-slate-600">{item.product.descripcion}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                          +{item.quantity} {item.product.unidad}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFromBatch(idx)}
+                          className="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"
+                          title="Quitar de la lista"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Supplier / Order Reference */}
             <div>
@@ -268,10 +379,14 @@ export const StockInView: React.FC<StockInViewProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting || !selectedProduct}
+              disabled={isSubmitting || (batchItems.length === 0 && (!selectedProduct || quantity <= 0))}
               className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
             >
-              {isSubmitting ? 'Procesando Entrada...' : 'Confirmar Entrada de Almacén'}
+              {isSubmitting
+                ? 'Procesando Entrada...'
+                : batchItems.length > 0
+                ? `Confirmar Entrada de ${batchItems.length} Producto(s)`
+                : 'Confirmar Entrada de Almacén'}
             </button>
 
           </form>

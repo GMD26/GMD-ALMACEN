@@ -31,6 +31,12 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Multi-product batch list state for stock out
+  const [batchItems, setBatchItems] = useState<Array<{
+    product: Product;
+    quantity: number;
+  }>>([]);
+
   // Checkbox Selection State for Deleting
   const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
 
@@ -44,39 +50,95 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
     }
   }, [initialProduct, products]);
 
+  // Auto SKU match when typing in searchQuery
+  const handleSearchQueryChange = (query: string) => {
+    setSearchQuery(query);
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return;
+    const exactMatch = products.find(p => p.sku.toLowerCase() === trimmed);
+    if (exactMatch) {
+      setSelectedSku(exactMatch.sku);
+    }
+  };
+
   const filteredProducts = products.filter(p => 
     p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.descripcion.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleAddCurrentToBatch = () => {
+    setErrorMsg(null);
+    if (!selectedProduct) return;
+    if (quantity <= 0) {
+      setErrorMsg('La cantidad debe ser mayor a 0.');
+      return;
+    }
+    if (quantity > selectedProduct.cantidadActual) {
+      setErrorMsg(`No hay suficiente stock para ${selectedProduct.sku}. Disponible: ${selectedProduct.cantidadActual} ${selectedProduct.unidad}`);
+      return;
+    }
+
+    const existingIndex = batchItems.findIndex(item => item.product.sku === selectedProduct.sku);
+    if (existingIndex >= 0) {
+      const updated = [...batchItems];
+      if (updated[existingIndex].quantity + quantity > selectedProduct.cantidadActual) {
+        setErrorMsg(`La suma excede el stock disponible (${selectedProduct.cantidadActual} ${selectedProduct.unidad}).`);
+        return;
+      }
+      updated[existingIndex].quantity += quantity;
+      setBatchItems(updated);
+    } else {
+      setBatchItems(prev => [
+        ...prev,
+        {
+          product: selectedProduct,
+          quantity
+        }
+      ]);
+    }
+
+    setSuccessMessage(`Agregado a la lista de despacho: ${quantity} x ${selectedProduct.sku}`);
+    setTimeout(() => setSuccessMessage(null), 2500);
+  };
+
+  const handleRemoveFromBatch = (index: number) => {
+    setBatchItems(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!selectedProduct) return;
+    const itemsToSubmit = batchItems.length > 0 ? batchItems : (selectedProduct && quantity > 0 ? [{
+      product: selectedProduct,
+      quantity
+    }] : []);
 
-    if (quantity <= 0) {
-      setErrorMsg('La cantidad a despachar debe ser mayor a 0.');
-      return;
-    }
+    if (itemsToSubmit.length === 0) return;
 
-    if (quantity > selectedProduct.cantidadActual) {
-      setErrorMsg(`No hay suficiente stock. Disponible actual: ${selectedProduct.cantidadActual} ${selectedProduct.unidad}.`);
-      return;
+    // Validate stock for all
+    for (const item of itemsToSubmit) {
+      if (item.quantity > item.product.cantidadActual) {
+        setErrorMsg(`Stock insuficiente para ${item.product.sku}. Disponible: ${item.product.cantidadActual}`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
     try {
-      await onRecordStockOut(
-        selectedProduct,
-        quantity,
-        clientJobRef || 'Salida General',
-        notes
-      );
+      for (const item of itemsToSubmit) {
+        await onRecordStockOut(
+          item.product,
+          item.quantity,
+          clientJobRef || 'Salida General',
+          notes
+        );
+      }
 
-      setSuccessMessage(`¡Salida de ${quantity} ${selectedProduct.unidad} de SKU ${selectedProduct.sku} registrada con éxito!`);
+      setSuccessMessage(`¡Salida registrada con éxito (${itemsToSubmit.length} producto(s))!`);
       setTimeout(() => setSuccessMessage(null), 4000);
 
+      setBatchItems([]);
       setQuantity(1);
       setNotes('Despacho de material.');
     } catch (err: any) {
@@ -165,15 +227,15 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Filtrar lista por SKU o nombre..."
+                  placeholder="Escriba SKU para auto-seleccionar o busque por nombre..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchQueryChange(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                 />
               </div>
 
               <select
-                required
+                required={batchItems.length === 0}
                 value={selectedSku}
                 onChange={(e) => setSelectedSku(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-bold text-slate-900 text-xs bg-slate-50"
@@ -213,7 +275,7 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
               <label className="block text-slate-700 font-bold mb-1">Cantidad a Despachar *</label>
               <input
                 type="number"
-                required
+                required={batchItems.length === 0}
                 min="1"
                 max={selectedProduct ? selectedProduct.cantidadActual : 100}
                 value={quantity}
@@ -221,6 +283,57 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-bold text-slate-900 text-sm"
               />
             </div>
+
+            {/* Add to batch button */}
+            <button
+              type="button"
+              onClick={handleAddCurrentToBatch}
+              disabled={!selectedProduct || quantity <= 0 || selectedProduct.cantidadActual === 0}
+              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 shadow-sm transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center space-x-2"
+            >
+              <PackageMinus className="w-4 h-4 text-amber-400" />
+              <span>+ Agregar a lista de despacho múltiple</span>
+            </button>
+
+            {/* Batch items list box */}
+            {batchItems.length > 0 && (
+              <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+                  <span>Lista de despacho múltiple ({batchItems.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => setBatchItems([])}
+                    className="text-[10px] text-red-600 hover:underline cursor-pointer"
+                  >
+                    Vaciar lista
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {batchItems.map((item, idx) => (
+                    <div key={idx} className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between text-[11px]">
+                      <div className="truncate max-w-[170px]">
+                        <span className="font-bold text-slate-900">[{item.product.sku}]</span>{' '}
+                        <span className="text-slate-600">{item.product.descripcion}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 rounded">
+                          -{item.quantity} {item.product.unidad}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFromBatch(idx)}
+                          className="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"
+                          title="Quitar de la lista"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Client / Job / Project Reference */}
             <div>
@@ -252,10 +365,14 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting || !selectedProduct || selectedProduct.cantidadActual === 0}
+              disabled={isSubmitting || (batchItems.length === 0 && (!selectedProduct || selectedProduct.cantidadActual === 0))}
               className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-amber-600/20 transition-all cursor-pointer disabled:opacity-50"
             >
-              {isSubmitting ? 'Procesando Salida...' : 'Confirmar Salida de Almacén'}
+              {isSubmitting
+                ? 'Procesando Salida...'
+                : batchItems.length > 0
+                ? `Confirmar Salida de ${batchItems.length} Producto(s)`
+                : 'Confirmar Salida de Almacén'}
             </button>
 
           </form>

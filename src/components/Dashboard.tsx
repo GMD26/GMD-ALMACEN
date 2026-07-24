@@ -13,7 +13,12 @@ import {
   Clock,
   Trophy,
   BarChart2,
-  Flame
+  Flame,
+  Tag,
+  Receipt,
+  Lock,
+  ShoppingBag,
+  ShoppingCart
 } from 'lucide-react';
 import { Product, InventoryMovement, ActiveTab } from '../types';
 import { ProductDashboardSection } from './ProductDashboardSection';
@@ -119,7 +124,61 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* Sub-Tab Navigation Bar */}
+      {/* Top Direct Shortcuts Bar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+        <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider px-1">
+          Accesos Rápidos a Módulos:
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <button
+            onClick={() => setActiveTab('listas-precios')}
+            className="flex items-center space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs p-2.5 rounded-xl border border-indigo-200 transition-all cursor-pointer"
+          >
+            <Tag className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+            <span className="truncate">Listas de Precios</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('remisiones')}
+            className="flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold text-xs p-2.5 rounded-xl border border-emerald-200 transition-all cursor-pointer"
+          >
+            <Receipt className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span className="truncate">Nota de Remisión</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('existencias')}
+            className="flex items-center space-x-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-900 font-bold text-xs p-2.5 rounded-xl border border-cyan-200 transition-all cursor-pointer"
+          >
+            <Lock className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+            <span className="truncate">Existencias Disp.</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('pedidos-ml')}
+            className="flex items-center space-x-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs p-2.5 rounded-xl border border-amber-200 transition-all cursor-pointer"
+          >
+            <ShoppingCart className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span className="truncate">Mercado Libre</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('pedidos-especiales')}
+            className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold text-xs p-2.5 rounded-xl border border-purple-200 transition-all cursor-pointer"
+          >
+            <ShoppingBag className="w-4 h-4 text-purple-600 flex-shrink-0" />
+            <span className="truncate">Pedidos Especiales</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('pedidos')}
+            className="flex items-center space-x-2 bg-red-50 hover:bg-red-100 text-red-900 font-bold text-xs p-2.5 rounded-xl border border-red-200 transition-all cursor-pointer"
+          >
+            <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <span className="truncate">Pedidos Material</span>
+          </button>
+        </div>
+      </div>
       <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center space-x-1.5 w-full sm:w-auto">
           <button
