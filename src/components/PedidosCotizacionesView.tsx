@@ -13,9 +13,14 @@ import {
   Filter,
   CheckCircle2,
   AlertCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Layers
 } from 'lucide-react';
-import { CotizacionPedido, ResponsablePedido } from '../types';
+import { CotizacionPedido, ResponsablePedido, CotizacionItem } from '../types';
+import { parseQuotePdf, ExtractedQuoteData } from '../utils/pdfQuoteParser';
 
 interface PedidosCotizacionesViewProps {
   responsable: ResponsablePedido;
@@ -35,16 +40,25 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | 'PENDIENTES' | 'COMPLETADOS'>('TODOS');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // New Order Form State
   const [folioCotizacion, setFolioCotizacion] = useState('');
   const [cliente, setCliente] = useState('');
   const [resumen, setResumen] = useState('');
+  const [subtotal, setSubtotal] = useState<number>(0);
+  const [iva, setIva] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
+  const [fechaCotizacion, setFechaCotizacion] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [partidas, setPartidas] = useState<CotizacionItem[]>([]);
   const [notas, setNotas] = useState('');
   const [cotizacionPdfName, setCotizacionPdfName] = useState('');
   const [cotizacionPdfUrl, setCotizacionPdfUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Parsing indicator state
+  const [isParsingPdf, setIsParsingPdf] = useState(false);
+  const [parseNotice, setParseNotice] = useState<string | null>(null);
 
   const filteredPedidos = pedidos.filter(p => {
     if (p.responsable !== responsable) return false;
@@ -67,19 +81,24 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
     setFolioCotizacion(`COT-${Date.now().toString().slice(-5)}`);
     setCliente('');
     setResumen('');
+    setSubtotal(0);
+    setIva(0);
     setTotal(0);
+    setFechaCotizacion(new Date().toISOString().split('T')[0]);
+    setPartidas([]);
     setNotas('');
     setCotizacionPdfName('');
     setCotizacionPdfUrl('');
+    setParseNotice(null);
     setIsModalOpen(true);
   };
 
-  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>, isGuia = false, idForGuia?: string) => {
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>, isGuia = false, idForGuia?: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const result = event.target?.result as string;
       if (isGuia && idForGuia) {
         onUpdatePedido(idForGuia, {
@@ -90,6 +109,30 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
       } else {
         setCotizacionPdfUrl(result);
         setCotizacionPdfName(file.name);
+
+        // Auto-extract quote information from PDF
+        setIsParsingPdf(true);
+        setParseNotice('Procesando PDF y extrayendo datos de la cotización...');
+        try {
+          const extracted: ExtractedQuoteData = await parseQuotePdf(file);
+          if (extracted.folioCotizacion) setFolioCotizacion(extracted.folioCotizacion);
+          if (extracted.cliente) setCliente(extracted.cliente);
+          if (extracted.fecha) setFechaCotizacion(extracted.fecha);
+          if (extracted.subtotal) setSubtotal(extracted.subtotal);
+          if (extracted.iva) setIva(extracted.iva);
+          if (extracted.total) setTotal(extracted.total);
+          if (extracted.resumen) setResumen(extracted.resumen);
+          if (extracted.partidas && extracted.partidas.length > 0) {
+            setPartidas(extracted.partidas);
+          }
+
+          setParseNotice(`✨ Auto-llenado exitoso desde "${file.name}": Folio (${extracted.folioCotizacion || 'N/D'}), Cliente (${extracted.cliente || 'N/D'}), Total ($${extracted.total.toLocaleString('es-MX')}) y ${extracted.partidas.length} productos detectados.`);
+        } catch (err: any) {
+          console.error(err);
+          setParseNotice('PDF adjuntado correctamente. (El archivo no contenía texto legible de cotización, introduzca los datos manualmente si es necesario).');
+        } finally {
+          setIsParsingPdf(false);
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -106,14 +149,17 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
         folioCotizacion,
         cliente,
         resumen,
+        subtotal: subtotal || undefined,
+        iva: iva || undefined,
         total,
+        partidas: partidas.length > 0 ? partidas : undefined,
         pagado: false,
         pendientePorPedir: true,
         guiaGenerada: false,
         pedidoCompletado: false,
         cotizacionPdfUrl: cotizacionPdfUrl || undefined,
         cotizacionNombreArchivo: cotizacionPdfName || undefined,
-        fecha: new Date().toISOString(),
+        fecha: fechaCotizacion || new Date().toISOString(),
         notas: notas || undefined,
         createdAt: new Date().toISOString()
       });
@@ -127,7 +173,6 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
 
   const isMonica = responsable === 'Mónica';
   const badgeColor = isMonica ? 'bg-pink-500 text-white' : 'bg-indigo-600 text-white';
-  const accentBorder = isMonica ? 'border-pink-200' : 'border-indigo-200';
 
   return (
     <div className="space-y-6">
@@ -143,9 +188,13 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${badgeColor}`}>
                 Módulo Vendedor
               </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                <Sparkles className="w-3 h-3" />
+                <span>Auto-llenado PDF Activo</span>
+              </span>
             </div>
             <p className="text-slate-300 text-xs mt-0.5">
-              Control de cotizaciones, validación de pago, estatus de pedido, generación de guía PDF y cierre.
+              Control de cotizaciones, auto-lectura de PDF (Folio, Cliente, Partidas, Subtotal, IVA, Total), validación de pago y emisión de guía.
             </p>
           </div>
         </div>
@@ -223,138 +272,197 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                   </td>
                 </tr>
               ) : (
-                filteredPedidos.map((pedido) => (
-                  <tr key={pedido.id} className={`hover:bg-slate-50 transition-colors ${pedido.pedidoCompletado ? 'bg-emerald-50/20' : ''}`}>
-                    
-                    {/* Folio & Cotización PDF */}
-                    <td className="py-3 px-4">
-                      <div className="font-extrabold text-slate-900">{pedido.folioCotizacion}</div>
-                      <div className="text-[10px] text-slate-400">{new Date(pedido.fecha).toLocaleDateString('es-MX')}</div>
-                      {pedido.cotizacionPdfUrl && (
-                        <a
-                          href={pedido.cotizacionPdfUrl}
-                          download={pedido.cotizacionNombreArchivo || `Cotizacion-${pedido.folioCotizacion}.pdf`}
-                          className="inline-flex items-center space-x-1 text-[10px] font-bold text-indigo-600 hover:underline mt-1"
-                        >
-                          <Download className="w-3 h-3" />
-                          <span>Descargar PDF</span>
-                        </a>
-                      )}
-                    </td>
+                filteredPedidos.map((pedido) => {
+                  const isExpanded = expandedId === pedido.id;
+                  return (
+                    <React.Fragment key={pedido.id}>
+                      <tr className={`hover:bg-slate-50 transition-colors ${pedido.pedidoCompletado ? 'bg-emerald-50/20' : ''}`}>
+                        
+                        {/* Folio & Cotización PDF */}
+                        <td className="py-3 px-4">
+                          <div className="font-extrabold text-slate-900 flex items-center space-x-1.5">
+                            <span>{pedido.folioCotizacion}</span>
+                            {pedido.partidas && pedido.partidas.length > 0 && (
+                              <button
+                                onClick={() => setExpandedId(isExpanded ? null : pedido.id)}
+                                className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded flex items-center space-x-1 font-bold cursor-pointer"
+                                title="Ver desglose de partidas"
+                              >
+                                <span>{pedido.partidas.length} ítems</span>
+                                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400">{new Date(pedido.fecha).toLocaleDateString('es-MX')}</div>
+                          {pedido.cotizacionPdfUrl && (
+                            <a
+                              href={pedido.cotizacionPdfUrl}
+                              download={pedido.cotizacionNombreArchivo || `Cotizacion-${pedido.folioCotizacion}.pdf`}
+                              className="inline-flex items-center space-x-1 text-[10px] font-bold text-indigo-600 hover:underline mt-1"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Descargar PDF</span>
+                            </a>
+                          )}
+                        </td>
 
-                    {/* Cliente */}
-                    <td className="py-3 px-4 font-bold text-slate-900">
-                      {pedido.cliente}
-                    </td>
+                        {/* Cliente */}
+                        <td className="py-3 px-4 font-bold text-slate-900">
+                          {pedido.cliente}
+                        </td>
 
-                    {/* Resumen */}
-                    <td className="py-3 px-4 text-slate-700 max-w-xs">
-                      <p className="line-clamp-2">{pedido.resumen}</p>
-                      {pedido.notas && <p className="text-[10px] text-slate-400 italic mt-0.5">{pedido.notas}</p>}
-                    </td>
+                        {/* Resumen */}
+                        <td className="py-3 px-4 text-slate-700 max-w-xs">
+                          <p className="line-clamp-2">{pedido.resumen}</p>
+                          {pedido.subtotal ? (
+                            <div className="text-[10px] text-slate-500 font-semibold mt-1">
+                              Subtotal: ${pedido.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | IVA: ${pedido.iva?.toLocaleString('es-MX', { minimumFractionDigits: 2 }) || '0.00'}
+                            </div>
+                          ) : null}
+                          {pedido.notas && <p className="text-[10px] text-slate-400 italic mt-0.5">{pedido.notas}</p>}
+                        </td>
 
-                    {/* Total */}
-                    <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">
-                      ${pedido.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                    </td>
+                        {/* Total */}
+                        <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">
+                          ${pedido.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </td>
 
-                    {/* Pagado Checkbox */}
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => onUpdatePedido(pedido.id, { pagado: !pedido.pagado })}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                          pedido.pagado
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
-                        }`}
-                      >
-                        {pedido.pagado ? '✓ Pagado' : 'Pendiente'}
-                      </button>
-                    </td>
-
-                    {/* Pendiente por Pedir Checkbox */}
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => onUpdatePedido(pedido.id, { pendientePorPedir: !pedido.pendientePorPedir })}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                          pedido.pendientePorPedir
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                        }`}
-                      >
-                        {pedido.pendientePorPedir ? 'Sí (Por pedir)' : 'No (Solicitado)'}
-                      </button>
-                    </td>
-
-                    {/* Guía Generada Checkbox & Upload */}
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex flex-col items-center space-y-1">
-                        <button
-                          onClick={() => onUpdatePedido(pedido.id, { guiaGenerada: !pedido.guiaGenerada })}
-                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold transition-all cursor-pointer ${
-                            pedido.guiaGenerada
-                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                              : 'bg-slate-100 text-slate-400 border border-slate-200'
-                          }`}
-                        >
-                          {pedido.guiaGenerada ? '✓ Guía Lista' : 'Sin Guía'}
-                        </button>
-
-                        <label className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer flex items-center space-x-1">
-                          <Upload className="w-2.5 h-2.5" />
-                          <span>{pedido.guiaNombreArchivo ? 'Cambiar Guía' : 'Subir PDF'}</span>
-                          <input
-                            type="file"
-                            accept=".pdf"
-                            className="hidden"
-                            onChange={(e) => handlePdfUpload(e, true, pedido.id)}
-                          />
-                        </label>
-
-                        {pedido.guiaPdfUrl && (
-                          <a
-                            href={pedido.guiaPdfUrl}
-                            download={pedido.guiaNombreArchivo || `Guia-${pedido.folioCotizacion}.pdf`}
-                            className="text-[9px] font-bold text-emerald-600 hover:underline flex items-center space-x-0.5"
+                        {/* Pagado Checkbox */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => onUpdatePedido(pedido.id, { pagado: !pedido.pagado })}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                              pedido.pagado
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+                            }`}
                           >
-                            <Download className="w-2.5 h-2.5" />
-                            <span>Descargar</span>
-                          </a>
-                        )}
-                      </div>
-                    </td>
+                            {pedido.pagado ? '✓ Pagado' : 'Pendiente'}
+                          </button>
+                        </td>
 
-                    {/* Pedido Completado */}
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => onUpdatePedido(pedido.id, { pedidoCompletado: !pedido.pedidoCompletado })}
-                        className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                          pedido.pedidoCompletado
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                        }`}
-                      >
-                        {pedido.pedidoCompletado ? '✓ Completado' : 'En Proceso'}
-                      </button>
-                    </td>
+                        {/* Pendiente por Pedir Checkbox */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => onUpdatePedido(pedido.id, { pendientePorPedir: !pedido.pendientePorPedir })}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                              pedido.pendientePorPedir
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            }`}
+                          >
+                            {pedido.pendientePorPedir ? 'Sí (Por pedir)' : 'No (Solicitado)'}
+                          </button>
+                        </td>
 
-                    {/* Delete Action */}
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`¿Está seguro de eliminar el pedido ${pedido.folioCotizacion}?`)) {
-                            onDeletePedido(pedido.id);
-                          }
-                        }}
-                        title="Eliminar pedido"
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
+                        {/* Guía Generada Checkbox & Upload */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex flex-col items-center space-y-1">
+                            <button
+                              onClick={() => onUpdatePedido(pedido.id, { guiaGenerada: !pedido.guiaGenerada })}
+                              className={`px-2 py-0.5 rounded text-[10px] font-extrabold transition-all cursor-pointer ${
+                                pedido.guiaGenerada
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                  : 'bg-slate-100 text-slate-400 border border-slate-200'
+                              }`}
+                            >
+                              {pedido.guiaGenerada ? '✓ Guía Lista' : 'Sin Guía'}
+                            </button>
 
-                  </tr>
-                ))
+                            <label className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer flex items-center space-x-1">
+                              <Upload className="w-2.5 h-2.5" />
+                              <span>{pedido.guiaNombreArchivo ? 'Cambiar Guía' : 'Subir PDF'}</span>
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                className="hidden"
+                                onChange={(e) => handlePdfUpload(e, true, pedido.id)}
+                              />
+                            </label>
+
+                            {pedido.guiaPdfUrl && (
+                              <a
+                                href={pedido.guiaPdfUrl}
+                                download={pedido.guiaNombreArchivo || `Guia-${pedido.folioCotizacion}.pdf`}
+                                className="text-[9px] font-bold text-emerald-600 hover:underline flex items-center space-x-0.5"
+                              >
+                                <Download className="w-2.5 h-2.5" />
+                                <span>Descargar</span>
+                              </a>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Pedido Completado */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => onUpdatePedido(pedido.id, { pedidoCompletado: !pedido.pedidoCompletado })}
+                            className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                              pedido.pedidoCompletado
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                            }`}
+                          >
+                            {pedido.pedidoCompletado ? '✓ Completado' : 'En Proceso'}
+                          </button>
+                        </td>
+
+                        {/* Delete Action */}
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`¿Está seguro de eliminar el pedido ${pedido.folioCotizacion}?`)) {
+                                onDeletePedido(pedido.id);
+                              }
+                            }}
+                            title="Eliminar pedido"
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+
+                      </tr>
+
+                      {/* Expanded Items Table */}
+                      {isExpanded && pedido.partidas && (
+                        <tr className="bg-indigo-50/40 border-b border-indigo-100">
+                          <td colSpan={9} className="p-4">
+                            <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-inner space-y-2">
+                              <div className="flex items-center space-x-2 text-indigo-900 font-extrabold text-xs">
+                                <Layers className="w-4 h-4 text-indigo-600" />
+                                <span>Desglose de Partidas Extraídas de Cotización {pedido.folioCotizacion}</span>
+                              </div>
+
+                              <table className="w-full text-left text-[11px] border border-slate-200 rounded-lg overflow-hidden">
+                                <thead className="bg-slate-100 font-bold text-slate-700">
+                                  <tr>
+                                    <th className="py-1.5 px-3">Código / SKU</th>
+                                    <th className="py-1.5 px-3">Descripción</th>
+                                    <th className="py-1.5 px-3 text-center">Cantidad</th>
+                                    <th className="py-1.5 px-3 text-right">Valor Unitario ($)</th>
+                                    <th className="py-1.5 px-3 text-right">Importe ($)</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                                  {pedido.partidas.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-50">
+                                      <td className="py-1 px-3 font-mono font-bold text-indigo-700">{item.codigo || '-'}</td>
+                                      <td className="py-1 px-3">{item.descripcion}</td>
+                                      <td className="py-1 px-3 text-center font-bold">{item.cantidad}</td>
+                                      <td className="py-1 px-3 text-right">${item.valorUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+                                      <td className="py-1 px-3 text-right font-black">${item.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -364,7 +472,7 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
       {/* Modal Add Pedido */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2 text-slate-900 font-extrabold text-base">
                 <FileCheck className="w-5 h-5 text-indigo-600" />
@@ -373,10 +481,44 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer">✕</button>
             </div>
 
+            {/* Subir PDF de Cotización Banner */}
+            <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-indigo-900 font-extrabold text-xs">
+                  <Sparkles className="w-4 h-4 text-indigo-600 animate-pulse" />
+                  <span>Auto-llenado inteligente desde PDF</span>
+                </div>
+                <label className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center space-x-1">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{cotizacionPdfName ? 'Cambiar PDF' : 'Subir Cotización PDF'}</span>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => handlePdfUpload(e, false)}
+                  />
+                </label>
+              </div>
+
+              {isParsingPdf && (
+                <div className="text-xs text-indigo-700 font-bold animate-pulse flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                  <span>Leyendo Serie/Folio, Cliente, Partidas, Subtotal, IVA y Total...</span>
+                </div>
+              )}
+
+              {parseNotice && !isParsingPdf && (
+                <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-start space-x-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <span>{parseNotice}</span>
+                </div>
+              )}
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Folio / Cotización *</label>
+                  <label className="block text-slate-700 font-bold mb-1">Folio / Serie *</label>
                   <input
                     type="text"
                     required
@@ -387,11 +529,11 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Cliente *</label>
+                  <label className="block text-slate-700 font-bold mb-1">Cliente / Contacto *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Nombre del cliente"
+                    placeholder="Nombre del cliente o razón social"
                     value={cliente}
                     onChange={(e) => setCliente(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500"
@@ -399,16 +541,48 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Resumen de Material / Productos *</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Detalle de SKUs, medidas y cantidades del pedido..."
-                  value={resumen}
-                  onChange={(e) => setResumen(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500"
-                />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Fecha Cotización</label>
+                  <input
+                    type="date"
+                    value={fechaCotizacion}
+                    onChange={(e) => setFechaCotizacion(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Subtotal ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={subtotal}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setSubtotal(val);
+                      if (total === 0) setTotal(val + iva);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">IVA ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={iva}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setIva(val);
+                      if (subtotal > 0) setTotal(subtotal + val);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
 
               <div>
@@ -420,23 +594,39 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                   required
                   value={total}
                   onChange={(e) => setTotal(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-black text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
-              {/* Subir PDF de Cotización */}
               <div>
-                <label className="block text-slate-700 font-bold mb-1">Adjuntar Cotización PDF (Opcional)</label>
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={(e) => handlePdfUpload(e, false)}
-                  className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                <label className="block text-slate-700 font-bold mb-1">Resumen de Material / Productos *</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Detalle de SKUs, cantidades, precios..."
+                  value={resumen}
+                  onChange={(e) => setResumen(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500"
                 />
-                {cotizacionPdfName && (
-                  <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ PDF seleccionado: {cotizacionPdfName}</p>
-                )}
               </div>
+
+              {partidas.length > 0 && (
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
+                  <div className="font-bold text-slate-800 text-xs">
+                    Partidas / Productos Detectados ({partidas.length}):
+                  </div>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {partidas.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-[11px] p-1.5 bg-white border border-slate-200 rounded-lg">
+                        <span className="font-mono text-indigo-700 font-bold">{item.codigo || `Ítem ${idx + 1}`}</span>
+                        <span className="truncate max-w-[200px] text-slate-800">{item.descripcion}</span>
+                        <span className="font-bold">{item.cantidad}x</span>
+                        <span className="font-black text-slate-900">${item.importe.toLocaleString('es-MX')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Notas adicionales</label>

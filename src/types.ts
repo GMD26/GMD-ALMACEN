@@ -171,6 +171,14 @@ export interface PedidoMercadoLibre {
 
 export type ResponsablePedido = 'Mónica' | 'César';
 
+export interface CotizacionItem {
+  codigo?: string;
+  descripcion: string;
+  cantidad: number;
+  valorUnitario: number;
+  importe: number;
+}
+
 export interface CotizacionPedido {
   id: string;
   responsable: ResponsablePedido;
@@ -178,6 +186,9 @@ export interface CotizacionPedido {
   cliente: string;
   resumen: string;
   total: number;
+  subtotal?: number;
+  iva?: number;
+  partidas?: CotizacionItem[];
   pagado: boolean;
   pendientePorPedir: boolean;
   guiaGenerada: boolean;

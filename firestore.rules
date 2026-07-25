@@ -43,6 +43,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /pedidos_cotizaciones/{cotizacionId} {
+      allow read, write: if true;
+    }
+
+    match /pedidos_web/{pedidoWebId} {
+      allow read, write: if true;
+    }
+
     match /test/{docId} {
       allow read, write: if true;
     }

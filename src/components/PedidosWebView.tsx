@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Globe, 
   Plus, 
@@ -11,7 +11,14 @@ import {
   FileSpreadsheet, 
   Download,
   ShoppingBag,
-  Truck
+  Truck,
+  RefreshCw,
+  Key,
+  Settings,
+  CheckCircle2,
+  AlertCircle,
+  Wifi,
+  Sparkles
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PedidoWeb } from '../types';
@@ -33,6 +40,24 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | 'PENDIENTES' | 'COMPLETADOS'>('TODOS');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
+
+  // WooCommerce API Credentials State
+  const [storeUrl, setStoreUrl] = useState('https://grupomasdigital.com');
+  const [consumerKey, setConsumerKey] = useState('');
+  const [consumerSecret, setConsumerSecret] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const savedCk = localStorage.getItem('wc_consumer_key') || '';
+    const savedCs = localStorage.getItem('wc_consumer_secret') || '';
+    const savedUrl = localStorage.getItem('wc_store_url') || 'https://grupomasdigital.com';
+    if (savedCk) setConsumerKey(savedCk);
+    if (savedCs) setConsumerSecret(savedCs);
+    if (savedUrl) setStoreUrl(savedUrl);
+  }, []);
 
   // Form State
   const [numPedido, setNumPedido] = useState('');
@@ -42,7 +67,6 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
   const [direccionEnvio, setDireccionEnvio] = useState('');
   const [notas, setNotas] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   const filteredPedidos = pedidos.filter(p => {
     const matchesSearch = 
@@ -63,6 +87,114 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
     setDireccionEnvio('');
     setNotas('');
     setIsModalOpen(true);
+  };
+
+  const handleSaveApiSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('wc_consumer_key', consumerKey.trim());
+    localStorage.setItem('wc_consumer_secret', consumerSecret.trim());
+    localStorage.setItem('wc_store_url', storeUrl.trim());
+    setIsApiSettingsOpen(false);
+    setSyncStatus({
+      message: 'Credenciales de WooCommerce API guardadas correctamente. ¡Listo para sincronizar!',
+      type: 'success'
+    });
+  };
+
+  // Synchronize orders directly via WooCommerce REST API /wp-json/wc/v3/orders
+  const handleSyncWooCommerce = async () => {
+    const ck = consumerKey.trim() || localStorage.getItem('wc_consumer_key') || '';
+    const cs = consumerSecret.trim() || localStorage.getItem('wc_consumer_secret') || '';
+    const baseUrl = (storeUrl.trim() || localStorage.getItem('wc_store_url') || 'https://grupomasdigital.com').replace(/\/$/, '');
+
+    if (!ck || !cs) {
+      setIsApiSettingsOpen(true);
+      setSyncStatus({
+        message: 'Por favor, ingrese el Consumer Key y Consumer Secret de la API REST de WooCommerce para iniciar.',
+        type: 'info'
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus({ message: 'Conectando con la API de WooCommerce (grupomasdigital.com)...', type: 'info' });
+
+    try {
+      const endpoint = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${encodeURIComponent(ck)}&consumer_secret=${encodeURIComponent(cs)}&per_page=30&order=desc`;
+      
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error en respuesta WooCommerce API (${response.status} ${response.statusText})`);
+      }
+
+      const orders = await response.json();
+
+      if (!Array.isArray(orders)) {
+        throw new Error('La respuesta de WooCommerce no devolvió un listado de pedidos válido.');
+      }
+
+      let importedCount = 0;
+      const existingNums = new Set(pedidos.map(p => p.numPedido.toUpperCase()));
+
+      for (const order of orders) {
+        const orderNum = `#${order.number || order.id}`;
+        
+        if (existingNums.has(orderNum.toUpperCase())) continue;
+
+        // Line Items SKU and Quantity
+        const lineItems = order.line_items || [];
+        const skusText = lineItems.map((item: any) => `${item.sku || 'N/A'}: ${item.name}`).join(' | ') || 'PRODUCTO-WEB';
+        const totalQty = lineItems.reduce((acc: number, item: any) => acc + (item.quantity || 1), 0) || 1;
+
+        // Shipping / Billing Address
+        const shipping = order.shipping || {};
+        const billing = order.billing || {};
+        const addressName = `${shipping.first_name || billing.first_name || ''} ${shipping.last_name || billing.last_name || ''}`.trim() || 'Cliente Web';
+        const addressLine = `${shipping.address_1 || billing.address_1 || ''} ${shipping.address_2 || billing.address_2 || ''}`.trim();
+        const cityState = `${shipping.city || billing.city || ''}, ${shipping.state || billing.state || ''} CP ${shipping.postcode || billing.postcode || ''}`.trim();
+        const phone = shipping.phone || billing.phone || '';
+
+        const fullAddress = `${addressName} - ${addressLine}, ${cityState} ${phone ? `(Tel: ${phone})` : ''}`.trim();
+        const orderDate = order.date_created ? order.date_created.split('T')[0] : new Date().toISOString().split('T')[0];
+
+        await onAddPedido({
+          numPedido: orderNum,
+          fechaPedido: orderDate,
+          sku: skusText,
+          cantidad: totalQty,
+          direccionEnvio: fullAddress,
+          recibido: true,
+          pedidoKronaline: false,
+          guiaGenerada: false,
+          completado: order.status === 'completed',
+          notas: `Estatus WC: ${order.status?.toUpperCase() || 'PROCESSING'} | Total: $${order.total || '0'}`,
+          createdAt: new Date().toISOString()
+        });
+
+        importedCount++;
+      }
+
+      setSyncStatus({
+        message: `✨ Sincronización exitosa con WooCommerce: Se procesaron ${orders.length} pedidos y se agregaron ${importedCount} pedidos nuevos.`,
+        type: 'success'
+      });
+    } catch (err: any) {
+      console.error('WooCommerce API Error:', err);
+
+      // Handle CORS or network failure by providing clear assistance
+      setSyncStatus({
+        message: `Error de conexión API: ${err.message || 'No se pudo conectar con la API de WooCommerce'}. Si encuentra restricciones de CORS en el servidor, asegúrese de habilitar los encabezados Access-Control-Allow-Origin en WordPress o usar importación Excel.`,
+        type: 'error'
+      });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -115,7 +247,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
           const fechaVal = row['Fecha'] || new Date().toISOString().split('T')[0];
 
           await onAddPedido({
-            numPedido: String(numP),
+            numPedido: String(numP).startsWith('#') ? String(numP) : `#${numP}`,
             fechaPedido: String(fechaVal),
             sku: String(skuVal),
             cantidad: qtyVal,
@@ -128,10 +260,16 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
           });
           count++;
         }
-        setImportStatus(`Se importaron ${count} pedidos web correctamente.`);
+        setSyncStatus({
+          message: `Se importaron ${count} pedidos web correctamente desde el archivo.`,
+          type: 'success'
+        });
       } catch (err) {
         console.error(err);
-        setImportStatus('Error al procesar el archivo Excel/CSV.');
+        setSyncStatus({
+          message: 'Error al procesar el archivo Excel/CSV de pedidos web.',
+          type: 'error'
+        });
       }
     };
     reader.readAsBinaryString(file);
@@ -139,7 +277,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header Banner with WordPress Link */}
+      {/* Header Banner with WooCommerce Integration Controls */}
       <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
           <div className="p-3 bg-blue-500/20 text-blue-400 rounded-2xl border border-blue-500/30">
@@ -149,24 +287,44 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
             <div className="flex items-center space-x-2">
               <h1 className="text-xl font-black text-white">Pedidos Web (WooCommerce)</h1>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-500 text-white">
-                Sitio Web
+                API REST Activa
               </span>
             </div>
             <p className="text-slate-300 text-xs mt-0.5">
-              Gestión de pedidos ingresados vía WordPress/WooCommerce. Vínculo directo a administración e importación de pedidos.
+              Integración directa vía API de WooCommerce (<code className="text-blue-300">grupomasdigital.com</code>). Sincronización automática de órdenes, direcciones e ítems.
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Sincronizar API WooCommerce */}
+          <button
+            onClick={handleSyncWooCommerce}
+            disabled={isSyncing}
+            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar API WooCommerce'}</span>
+          </button>
+
+          {/* Configurar API */}
+          <button
+            onClick={() => setIsApiSettingsOpen(true)}
+            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-700 transition-colors cursor-pointer"
+            title="Configurar credenciales Consumer Key / Secret"
+          >
+            <Settings className="w-4 h-4 text-blue-400" />
+            <span>Credenciales API</span>
+          </button>
+
           <a
             href="https://grupomasdigital.com/wp-admin/edit.php?post_type=shop_order"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
+            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs px-3 py-2.5 rounded-xl shadow-md transition-all"
           >
             <ExternalLink className="w-4 h-4" />
-            <span>Ir a Pedidos WordPress</span>
+            <span>WordPress Orders</span>
           </a>
 
           <input
@@ -179,10 +337,10 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 transition-colors cursor-pointer"
+            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-700 transition-colors cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            <span>Importar CSV / Excel</span>
+            <span>Importar CSV</span>
           </button>
 
           <button
@@ -190,15 +348,25 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
             className="flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Nuevo Pedido Web</span>
+            <span>Nuevo Pedido</span>
           </button>
         </div>
       </div>
 
-      {importStatus && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 rounded-xl text-xs font-bold flex items-center justify-between">
-          <span>{importStatus}</span>
-          <button onClick={() => setImportStatus(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+      {/* Sync Status Alert */}
+      {syncStatus && (
+        <div className={`p-4 rounded-2xl text-xs font-bold border flex items-start justify-between ${
+          syncStatus.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800' :
+          syncStatus.type === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-800' :
+          'bg-blue-500/10 border-blue-500/30 text-blue-800'
+        }`}>
+          <div className="flex items-start space-x-2">
+            {syncStatus.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />}
+            {syncStatus.type === 'error' && <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />}
+            {syncStatus.type === 'info' && <Wifi className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5 animate-pulse" />}
+            <span>{syncStatus.message}</span>
+          </div>
+          <button onClick={() => setSyncStatus(null)} className="text-slate-400 hover:text-slate-600 font-bold ml-2">✕</button>
         </div>
       )}
 
@@ -249,7 +417,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
               <tr>
                 <th className="py-3 px-4"># Pedido</th>
                 <th className="py-3 px-4">Fecha</th>
-                <th className="py-3 px-4">SKU</th>
+                <th className="py-3 px-4">SKU / Producto</th>
                 <th className="py-3 px-4 text-center">Cantidad</th>
                 <th className="py-3 px-4">Dirección de Envío</th>
                 <th className="py-3 px-4 text-center">Recibido</th>
@@ -263,7 +431,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
               {filteredPedidos.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="text-center py-12 text-slate-400">
-                    No hay pedidos web registrados en este filtro. Importe desde Excel/CSV o haga clic en "Nuevo Pedido Web".
+                    No hay pedidos web registrados en este filtro. Haga clic en "Sincronizar API WooCommerce", importe desde CSV o agregue un pedido.
                   </td>
                 </tr>
               ) : (
@@ -277,8 +445,8 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                       {pedido.fechaPedido}
                     </td>
 
-                    <td className="py-3 px-4 font-extrabold text-blue-700">
-                      {pedido.sku}
+                    <td className="py-3 px-4 font-extrabold text-blue-700 max-w-xs">
+                      <span className="line-clamp-2">{pedido.sku}</span>
                     </td>
 
                     <td className="py-3 px-4 text-center font-bold text-slate-900">
@@ -369,6 +537,79 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
         </div>
       </div>
 
+      {/* Modal API Credentials Settings */}
+      {isApiSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2 text-slate-900 font-extrabold text-base">
+                <Key className="w-5 h-5 text-blue-600" />
+                <span>Configurar WooCommerce API REST</span>
+              </div>
+              <button onClick={() => setIsApiSettingsOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer">✕</button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Obtenga sus credenciales en su panel de WordPress: <br />
+              <strong className="text-slate-900">WooCommerce → Ajustes → Avanzado → API REST → Añadir clave</strong> (Permisos: Lectura).
+            </p>
+
+            <form onSubmit={handleSaveApiSettings} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">URL de la Tienda WordPress *</label>
+                <input
+                  type="url"
+                  required
+                  value={storeUrl}
+                  onChange={(e) => setStoreUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Consumer Key (ck_...) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxx"
+                  value={consumerKey}
+                  onChange={(e) => setConsumerKey(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Consumer Secret (cs_...) *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="cs_xxxxxxxxxxxxxxxxxxxxxxxx"
+                  value={consumerSecret}
+                  onChange={(e) => setConsumerSecret(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsApiSettingsOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  Guardar Credenciales
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Add Pedido Web */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-fadeIn">
@@ -408,7 +649,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="block text-slate-700 font-bold mb-1">SKU Producto *</label>
+                  <label className="block text-slate-700 font-bold mb-1">SKU / Producto *</label>
                   <input
                     type="text"
                     required
