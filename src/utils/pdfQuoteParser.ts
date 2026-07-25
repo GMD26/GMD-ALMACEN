@@ -196,18 +196,18 @@ export function parseQuoteText(fullText: string, lines: string[]): ExtractedQuot
           .trim();
 
         const skuMatch = line.match(/([A-Z0-9]{3,15}\-[A-Z0-9]{2,10}|[A-Z0-9]{5,12})/);
-        const skuCode = skuMatch ? skuMatch[1] : undefined;
+        const skuCode = skuMatch ? skuMatch[1] : '';
 
         if (desc.length > 3) {
           const unitVal = amounts.length >= 2 ? amounts[amounts.length - 2] : amounts[0];
           const importVal = amounts.length >= 1 ? amounts[amounts.length - 1] : unitVal * qty;
 
           partidas.push({
-            codigo: skuCode,
-            descripcion: desc,
-            cantidad: qty,
-            valorUnitario: unitVal,
-            importe: importVal
+            codigo: skuCode || '',
+            descripcion: desc || '',
+            cantidad: qty || 1,
+            valorUnitario: unitVal || 0,
+            importe: importVal || 0
           });
         }
       }

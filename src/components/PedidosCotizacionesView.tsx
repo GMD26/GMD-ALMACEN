@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { CotizacionPedido, ResponsablePedido, CotizacionItem } from '../types';
 import { parseQuotePdf, ExtractedQuoteData } from '../utils/pdfQuoteParser';
+import { cleanFirestoreData } from '../utils/firestoreSanitizer';
 
 interface PedidosCotizacionesViewProps {
   responsable: ResponsablePedido;
@@ -162,30 +163,41 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
 
     setIsSubmitting(true);
     try {
-      await onAddPedido({
+      const cleanPartidas = (partidas || []).map(p => ({
+        codigo: p.codigo || '',
+        descripcion: p.descripcion || '',
+        cantidad: Number(p.cantidad) || 1,
+        valorUnitario: Number(p.valorUnitario) || 0,
+        importe: Number(p.importe) || 0
+      }));
+
+      const payload = cleanFirestoreData({
         responsable,
-        folioCotizacion: folioCotizacion || `COT-${Date.now().toString().slice(-5)}`,
+        folioCotizacion: folioCotizacion.trim() || `COT-${Date.now().toString().slice(-5)}`,
         cliente: finalCliente,
         resumen: finalResumen,
-        subtotal: subtotal || undefined,
-        iva: iva || undefined,
-        total: total || 0,
-        partidas: partidas.length > 0 ? partidas : undefined,
+        subtotal: Number(subtotal) || 0,
+        iva: Number(iva) || 0,
+        total: Number(total) || 0,
+        partidas: cleanPartidas,
         pagado: false,
         pendientePorPedir: true,
         guiaGenerada: false,
         pedidoCompletado: false,
         facturado,
-        cotizacionPdfUrl: cotizacionPdfUrl || undefined,
-        cotizacionNombreArchivo: cotizacionPdfName || undefined,
+        cotizacionPdfUrl: cotizacionPdfUrl || '',
+        cotizacionNombreArchivo: cotizacionPdfName || '',
         fecha: fechaCotizacion || new Date().toISOString(),
-        notas: notas || undefined,
+        notas: notas || '',
         createdAt: new Date().toISOString()
       });
+
+      await onAddPedido(payload);
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error(err);
-      alert('Error al crear el pedido: ' + (err?.message || String(err)));
+      console.error('Error al crear el pedido de cotización:', err);
+      const errorMsg = err?.message || String(err);
+      alert(`⚠️ Error al guardar el pedido:\n\n${errorMsg}\n\nPor favor revise los campos del formulario.`);
     } finally {
       setIsSubmitting(false);
     }

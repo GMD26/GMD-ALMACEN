@@ -36,6 +36,7 @@ import {
   PedidoWeb
 } from './types';
 import { INITIAL_PRODUCTS } from './data/initialCatalog';
+import { cleanFirestoreData } from './utils/firestoreSanitizer';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
 import { InventoryList } from './components/InventoryList';
@@ -818,10 +819,11 @@ export default function App() {
   const handleAddPedidoML = async (pedidoData: Omit<PedidoMercadoLibre, 'id' | 'createdAt'>) => {
     try {
       const ref = collection(db, 'pedidos_ml');
-      await addDoc(ref, {
+      const cleanData = cleanFirestoreData({
         ...pedidoData,
         createdAt: new Date().toISOString()
       });
+      await addDoc(ref, cleanData);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'pedidos_ml');
       throw err;
@@ -852,7 +854,8 @@ export default function App() {
   const handleAddCotizacion = async (cotizacionData: Omit<CotizacionPedido, 'id'>) => {
     try {
       const ref = collection(db, 'pedidos_cotizaciones');
-      await addDoc(ref, cotizacionData);
+      const cleanData = cleanFirestoreData(cotizacionData);
+      await addDoc(ref, cleanData);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'pedidos_cotizaciones');
       throw err;
@@ -862,7 +865,8 @@ export default function App() {
   const handleUpdateCotizacion = async (id: string, updates: Partial<CotizacionPedido>) => {
     try {
       const ref = doc(db, 'pedidos_cotizaciones', id);
-      await updateDoc(ref, updates);
+      const cleanUpdates = cleanFirestoreData(updates);
+      await updateDoc(ref, cleanUpdates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pedidos_cotizaciones/${id}`);
       throw err;
@@ -883,7 +887,8 @@ export default function App() {
   const handleAddPedidoWeb = async (webData: Omit<PedidoWeb, 'id'>) => {
     try {
       const ref = collection(db, 'pedidos_web');
-      await addDoc(ref, webData);
+      const cleanData = cleanFirestoreData(webData);
+      await addDoc(ref, cleanData);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'pedidos_web');
       throw err;
@@ -893,7 +898,8 @@ export default function App() {
   const handleUpdatePedidoWeb = async (id: string, updates: Partial<PedidoWeb>) => {
     try {
       const ref = doc(db, 'pedidos_web', id);
-      await updateDoc(ref, updates);
+      const cleanUpdates = cleanFirestoreData(updates);
+      await updateDoc(ref, cleanUpdates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `pedidos_web/${id}`);
       throw err;
