@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { ExternalLink, ShoppingCart, Plus, Search, Check, CheckSquare, Square, Trash2, Package, Truck, AlertCircle, FileSpreadsheet, Upload } from 'lucide-react';
+import { ExternalLink, ShoppingCart, Plus, Search, Check, CheckSquare, Square, Trash2, Package, Truck, AlertCircle, FileSpreadsheet, Upload, XCircle, Banner } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PedidoMercadoLibre } from '../types';
 
 interface PedidosMercadoLibreViewProps {
   pedidosML: PedidoMercadoLibre[];
   onAddPedidoML: (pedido: Omit<PedidoMercadoLibre, 'id' | 'createdAt'>) => Promise<void>;
-  onToggleCampoML: (id: string, field: 'pedidoAKronaline' | 'entregado', value: boolean) => Promise<void>;
+  onToggleCampoML: (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado', value: boolean) => Promise<void>;
   onDeletePedidoML: (id: string) => Promise<void>;
 }
 
@@ -19,6 +19,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
   onDeletePedidoML
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'CANCELLED' | 'DELIVERED'>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,18 +27,29 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
   // Form State
   const [numPedidoML, setNumPedidoML] = useState('');
   const [clienteML, setClienteML] = useState('');
+  const [sku, setSku] = useState('');
   const [descripcionProducto, setDescripcionProducto] = useState('');
   const [cantidad, setCantidad] = useState<number>(1);
   const [pedidoAKronaline, setPedidoAKronaline] = useState<boolean>(false);
   const [entregado, setEntregado] = useState<boolean>(false);
+  const [cancelado, setCancelado] = useState<boolean>(false);
   const [notas, setNotas] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredPedidos = pedidosML.filter(p =>
-    p.numPedidoML.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.clienteML.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.descripcionProducto.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPedidos = pedidosML.filter(p => {
+    const matchesSearch = 
+      p.numPedidoML.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.clienteML.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.descripcionProducto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    let matchesStatus = true;
+    if (statusFilter === 'CANCELLED') matchesStatus = !!p.cancelado;
+    else if (statusFilter === 'DELIVERED') matchesStatus = !!p.entregado && !p.cancelado;
+    else if (statusFilter === 'ACTIVE') matchesStatus = !p.cancelado && !p.entregado;
+
+    return matchesSearch && matchesStatus;
+  });
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,68 +61,63 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
-      const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      
+      // Parse using header: 1 to get exact 0-indexed column access (A=0, R=17, V=21, AA=26)
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-      if (jsonRows.length === 0) {
+      if (rawRows.length === 0) {
         setImportMessage('El archivo Excel está vacío.');
         setTimeout(() => setImportMessage(null), 3000);
         return;
       }
 
-      let importedCount = 0;
-      for (const row of jsonRows) {
-        // Try flexibly matching common ML Excel columns
-        const numPedido = String(
-          row['# Pedido ML'] ||
-          row['# Venta'] ||
-          row['Número de venta'] ||
-          row['N° de venta'] ||
-          row['Orden'] ||
-          row['ID Venta'] ||
-          row['Pedido'] ||
-          `ML-${Date.now().toString().slice(-6)}-${importedCount + 1}`
-        ).trim();
-
-        const cliente = String(
-          row['Cliente ML'] ||
-          row['Cliente'] ||
-          row['Comprador'] ||
-          row['Nombre'] ||
-          'Cliente ML'
-        ).trim();
-
-        const descripcion = String(
-          row['Producto Requerido'] ||
-          row['Producto'] ||
-          row['Título'] ||
-          row['Descripcion'] ||
-          row['Descripción'] ||
-          row['Publicación'] ||
-          'Producto ML'
-        ).trim();
-
-        const cantNum = parseInt(
-          row['Cantidad'] || row['Unidades'] || row['Cant'] || '1',
-          10
-        ) || 1;
-
-        const kronalineBool = String(row['Pedido a Kronaline'] || row['Kronaline'] || '').toUpperCase().includes('SI') || String(row['Pedido a Kronaline'] || row['Kronaline'] || '').toUpperCase().includes('TRUE');
-        const entregadoBool = String(row['Entregado'] || '').toUpperCase().includes('SI') || String(row['Entregado'] || '').toUpperCase().includes('TRUE');
-        const notaStr = String(row['Notas'] || row['Observaciones'] || 'Importado por Excel ML').trim();
-
-        if (descripcion) {
-          await onAddPedidoML({
-            numPedidoML: numPedido,
-            clienteML: cliente,
-            descripcionProducto: descripcion,
-            cantidad: cantNum,
-            pedidoAKronaline: kronalineBool,
-            entregado: entregadoBool,
-            fecha: new Date().toISOString(),
-            notas: notaStr
-          });
-          importedCount++;
+      // Determine if row 0 is a header row
+      let startIdx = 0;
+      if (rawRows.length > 1) {
+        const firstCell = String(rawRows[0][0] || '').toLowerCase();
+        if (
+          firstCell.includes('número') || 
+          firstCell.includes('pedido') || 
+          firstCell.includes('venta') || 
+          firstCell.includes('orden') ||
+          firstCell.includes('id') ||
+          firstCell === 'a'
+        ) {
+          startIdx = 1;
         }
+      }
+
+      let importedCount = 0;
+      for (let i = startIdx; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.length === 0) continue;
+
+        // Mapeo exacto solicitado:
+        // Número de pedido → columna A (idx 0)
+        // SKU → columnas R (idx 17) y V (idx 21)
+        // Nombre del cliente → columna AA (idx 26)
+        const numPedido = String(row[0] || '').trim();
+        const skuVal = String(row[17] || row[21] || '').trim();
+        const clienteVal = String(row[26] || '').trim() || 'Cliente ML';
+
+        if (!numPedido && !skuVal) continue; // Skip empty rows
+
+        const descVal = skuVal ? `[SKU: ${skuVal}] ${row[2] || row[3] || 'Producto ML'}` : String(row[2] || row[1] || 'Producto ML').trim();
+        const cantNum = parseInt(String(row[5] || row[4] || '1'), 10) || 1;
+
+        await onAddPedidoML({
+          numPedidoML: numPedido || `ML-${Date.now().toString().slice(-6)}-${importedCount + 1}`,
+          clienteML: clienteVal,
+          sku: skuVal,
+          descripcionProducto: descVal,
+          cantidad: cantNum,
+          pedidoAKronaline: false,
+          entregado: false,
+          cancelado: false,
+          fecha: new Date().toISOString(),
+          notas: `Importado Excel ML (Col A: ${numPedido || '—'}, Col R/V SKU: ${skuVal || '—'}, Col AA: ${clienteVal})`
+        });
+        importedCount++;
       }
 
       setImportMessage(`¡Se importaron ${importedCount} pedidos de Mercado Libre exitosamente!`);
@@ -133,20 +140,24 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
       await onAddPedidoML({
         numPedidoML,
         clienteML: clienteML || 'Cliente ML',
+        sku,
         descripcionProducto,
         cantidad,
         pedidoAKronaline,
         entregado,
+        cancelado,
         fecha: new Date().toISOString(),
         notas
       });
 
       setNumPedidoML('');
       setClienteML('');
+      setSku('');
       setDescripcionProducto('');
       setCantidad(1);
       setPedidoAKronaline(false);
       setEntregado(false);
+      setCancelado(false);
       setNotas('');
       setIsModalOpen(false);
     } catch (err) {
@@ -186,6 +197,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+            title="Importar mapeando Columna A (Pedido), Col R/V (SKU) y Col AA (Cliente)"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
             <span>Importar Excel ML</span>
@@ -220,22 +232,46 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
         </div>
       )}
 
-      {/* Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+      {/* Search & Status Filters */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por # Pedido ML, cliente o producto..."
+            placeholder="Buscar por # Pedido ML, cliente, SKU o producto..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-amber-500"
           />
         </div>
 
-        <span className="text-xs text-slate-500 font-bold hidden sm:inline-block">
-          {filteredPedidos.length} pedidos en lista
-        </span>
+        {/* Status Filter Buttons */}
+        <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold w-full sm:w-auto">
+          <button
+            onClick={() => setStatusFilter('ALL')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+          >
+            Todos ({pedidosML.length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('ACTIVE')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'ACTIVE' ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-500'}`}
+          >
+            Activos
+          </button>
+          <button
+            onClick={() => setStatusFilter('DELIVERED')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'DELIVERED' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500'}`}
+          >
+            Entregados
+          </button>
+          <button
+            onClick={() => setStatusFilter('CANCELLED')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'CANCELLED' ? 'bg-white text-red-800 shadow-sm' : 'text-slate-500'}`}
+          >
+            Cancelados
+          </button>
+        </div>
       </div>
 
       {/* Main ML Pedidos Table */}
@@ -246,25 +282,35 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
               <tr>
                 <th className="py-3 px-4"># Pedido ML / Fecha</th>
                 <th className="py-3 px-4">Cliente ML</th>
-                <th className="py-3 px-4">Producto Requerido</th>
+                <th className="py-3 px-4">SKU / Producto Requerido</th>
                 <th className="py-3 px-4 text-center">Cant.</th>
                 <th className="py-3 px-4 text-center bg-amber-950 text-amber-300">Pedido a Kronaline</th>
                 <th className="py-3 px-4 text-center bg-emerald-950 text-emerald-300">Entregado</th>
+                <th className="py-3 px-4 text-center bg-red-950 text-red-300">Estado / Cancelado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-400">
-                    No hay pedidos de Mercado Libre registrados. Registre uno o abra el portal de Mercado Libre.
+                  <td colSpan={8} className="text-center py-12 text-slate-400">
+                    No hay pedidos de Mercado Libre registrados en este filtro.
                   </td>
                 </tr>
               ) : (
                 filteredPedidos.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                  <tr 
+                    key={p.id} 
+                    className={`transition-colors ${
+                      p.cancelado 
+                        ? 'bg-red-50/40 text-slate-400' 
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
                     <td className="py-3 px-4">
-                      <div className="font-black text-slate-900 text-sm">{p.numPedidoML}</div>
+                      <div className={`font-black text-sm ${p.cancelado ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                        {p.numPedidoML}
+                      </div>
                       <div className="text-[10px] text-slate-500">
                         {new Date(p.fecha).toLocaleDateString('es-MX')}
                       </div>
@@ -275,7 +321,14 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                     </td>
 
                     <td className="py-3 px-4 text-slate-700 max-w-[260px]">
-                      <div>{p.descripcionProducto}</div>
+                      {p.sku && (
+                        <span className="inline-block px-1.5 py-0.5 bg-slate-100 font-mono font-bold text-[10px] text-slate-800 rounded border border-slate-200 mr-1.5">
+                          {p.sku}
+                        </span>
+                      )}
+                      <span className={p.cancelado ? 'line-through text-slate-400' : ''}>
+                        {p.descripcionProducto}
+                      </span>
                       {p.notas && <div className="text-[10px] text-slate-400 italic">{p.notas}</div>}
                     </td>
 
@@ -287,14 +340,15 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                     <td className="py-3 px-4 text-center bg-amber-50/50">
                       <button
                         onClick={() => onToggleCampoML(p.id, 'pedidoAKronaline', !p.pedidoAKronaline)}
-                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        disabled={p.cancelado}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 ${
                           p.pedidoAKronaline
                             ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400'
                             : 'bg-white border border-slate-300 text-slate-500 hover:border-amber-400'
                         }`}
                       >
                         {p.pedidoAKronaline ? <CheckSquare className="w-4 h-4 text-white" /> : <Square className="w-4 h-4 text-slate-400" />}
-                        <span>{p.pedidoAKronaline ? 'Solicitado a Kronaline' : 'Pendiente Kronaline'}</span>
+                        <span>{p.pedidoAKronaline ? 'Solicitado Kronaline' : 'Pendiente Kronaline'}</span>
                       </button>
                     </td>
 
@@ -302,7 +356,8 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                     <td className="py-3 px-4 text-center bg-emerald-50/50">
                       <button
                         onClick={() => onToggleCampoML(p.id, 'entregado', !p.entregado)}
-                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        disabled={p.cancelado}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 ${
                           p.entregado
                             ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
                             : 'bg-white border border-slate-300 text-slate-500 hover:border-emerald-400'
@@ -313,11 +368,26 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                       </button>
                     </td>
 
+                    {/* Cancelado Checkbox/Toggle Column */}
+                    <td className="py-3 px-4 text-center bg-red-50/50">
+                      <button
+                        onClick={() => onToggleCampoML(p.id, 'cancelado', !p.cancelado)}
+                        className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          p.cancelado
+                            ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-400'
+                            : 'bg-white border border-slate-300 text-slate-500 hover:border-red-400'
+                        }`}
+                      >
+                        <XCircle className="w-4 h-4" />
+                        <span>{p.cancelado ? 'CANCELADO' : 'Activo'}</span>
+                      </button>
+                    </td>
+
                     <td className="py-3 px-4 text-center">
                       <button
                         onClick={() => onDeletePedidoML(p.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
-                        title="Eliminar registro"
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="Eliminar pedido de la lista"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -356,21 +426,35 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                 />
               </div>
 
-              {/* Cliente ML */}
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Nombre del Cliente (Mercado Libre)</label>
-                <input
-                  type="text"
-                  placeholder="Ej. Carlos Mendoza"
-                  value={clienteML}
-                  onChange={(e) => setClienteML(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                {/* Cliente ML */}
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Cliente ML</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Carlos Mendoza"
+                    value={clienteML}
+                    onChange={(e) => setClienteML(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                {/* SKU */}
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">SKU</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. AL690"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 uppercase focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
               </div>
 
               {/* Producto Requerido */}
               <div>
-                <label className="block text-slate-700 font-bold mb-1">Descripción del Producto / SKU *</label>
+                <label className="block text-slate-700 font-bold mb-1">Descripción del Producto *</label>
                 <textarea
                   rows={2}
                   required
@@ -394,7 +478,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                 />
               </div>
 
-              {/* Checkboxes Kronaline & Entregado */}
+              {/* Checkboxes Kronaline, Entregado, Cancelado */}
               <div className="space-y-2 pt-1 border-t border-slate-100">
                 <label className="flex items-center space-x-2 text-slate-800 font-bold cursor-pointer">
                   <input
@@ -403,7 +487,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                     onChange={(e) => setPedidoAKronaline(e.target.checked)}
                     className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
                   />
-                  <span>Pedido a Kronaline (solicitado al proveedor)</span>
+                  <span>Pedido a Kronaline</span>
                 </label>
 
                 <label className="flex items-center space-x-2 text-slate-800 font-bold cursor-pointer">
@@ -413,7 +497,17 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                     onChange={(e) => setEntregado(e.target.checked)}
                     className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                   />
-                  <span>Entregado al cliente / paquetería</span>
+                  <span>Entregado</span>
+                </label>
+
+                <label className="flex items-center space-x-2 text-red-700 font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cancelado}
+                    onChange={(e) => setCancelado(e.target.checked)}
+                    className="rounded text-red-600 focus:ring-red-500 w-4 h-4"
+                  />
+                  <span>Marcar como Cancelado</span>
                 </label>
               </div>
 

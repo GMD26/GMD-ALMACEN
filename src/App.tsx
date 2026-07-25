@@ -769,7 +769,7 @@ export default function App() {
     }
   };
 
-  const handleToggleCampoML = async (id: string, field: 'pedidoAKronaline' | 'entregado', value: boolean) => {
+  const handleToggleCampoML = async (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado', value: boolean) => {
     try {
       const ref = doc(db, 'pedidos_ml', id);
       await updateDoc(ref, { [field]: value });
@@ -800,7 +800,7 @@ export default function App() {
     setActiveTab('salidas');
   };
 
-  const lowStockCount = products.filter(p => p.cantidadActual <= p.minStock).length;
+  const lowStockCount = products.filter(p => p.minStock > 0 && p.cantidadActual <= p.minStock).length;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans antialiased flex flex-col selection:bg-cyan-500 selection:text-white">

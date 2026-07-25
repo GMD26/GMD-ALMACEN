@@ -83,9 +83,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({
     const matchesLoc = selectedLocation === 'ALL' || p.ubicacionAlmacen === selectedLocation;
 
     let matchesStock = true;
-    if (stockFilter === 'LOW') matchesStock = p.cantidadActual <= p.minStock && p.cantidadActual > 0;
+    if (stockFilter === 'LOW') matchesStock = p.minStock > 0 && p.cantidadActual <= p.minStock && p.cantidadActual > 0;
     else if (stockFilter === 'OUT') matchesStock = p.cantidadActual === 0;
-    else if (stockFilter === 'NORMAL') matchesStock = p.cantidadActual > p.minStock;
+    else if (stockFilter === 'NORMAL') matchesStock = p.minStock === 0 ? p.cantidadActual > 0 : p.cantidadActual > p.minStock;
 
     return matchesSearch && matchesCat && matchesLoc && matchesStock;
   });
@@ -487,9 +487,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({
                   <label className="block text-slate-700 font-bold mb-1">Alerta Stock Bajo (Mínimo)</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     value={formData.minStock}
-                    onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) || 1 })}
+                    onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) >= 0 ? parseInt(e.target.value) : 0 })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-slate-900"
                   />
                 </div>
@@ -586,9 +586,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({
                   <label className="block text-slate-700 font-bold mb-1">Umbral Stock Bajo (Mínimo)</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     value={editingProduct.minStock}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, minStock: parseInt(e.target.value) || 1 })}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, minStock: parseInt(e.target.value) >= 0 ? parseInt(e.target.value) : 0 })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-slate-900 font-bold"
                   />
                 </div>

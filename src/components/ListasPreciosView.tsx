@@ -25,29 +25,22 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
   const [editingItem, setEditingItem] = useState<PrecioListaItem | null>(null);
 
   // Form State
-  const [categoria, setCategoria] = useState('Fine Art / Fotográfico');
+  const [categoria, setCategoria] = useState('Precio');
   const [precio, setPrecio] = useState<number>(0);
   const [descripcion, setDescripcion] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Categories list
-  const categoriesList = Array.from(new Set([
+  // Categories list - Restricted strictly to the 7 price categories
+  const categoriesList = [
     'Precio',
     'Precio más IVA',
     'Precio descuento',
     '1.14',
     '1.16',
     '1.2798',
-    'Costo',
-    'Fine Art / Fotográfico',
-    'Plotter Gran Formato',
-    'Papeles Especiales',
-    'Lonas y Viniles',
-    'Tintas y Consumibles',
-    ...listasPrecios.map(p => p.categoria),
-    ...products.map(p => p.categoria).filter(Boolean)
-  ]));
+    'Costo'
+  ];
 
   const filteredItems = listasPrecios.filter(item => {
     const matchesCat = categoryFilter === 'ALL' || item.categoria === categoryFilter;
@@ -58,7 +51,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
-    setCategoria('Fine Art / Fotográfico');
+    setCategoria('Precio');
     setPrecio(0);
     setDescripcion('');
     setIsModalOpen(true);

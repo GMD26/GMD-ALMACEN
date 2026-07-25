@@ -3,18 +3,15 @@ import {
   AlertTriangle, 
   FileText, 
   ShoppingCart, 
-  CheckSquare, 
-  Square, 
   Download, 
   Send, 
-  PackageCheck, 
-  Building2, 
-  Clock,
   CheckCircle2,
   ListOrdered,
   Search,
   Plus,
-  Trash2
+  Trash2,
+  Sparkles,
+  Layers
 } from 'lucide-react';
 import { Product, PurchaseOrder, PurchaseOrderItem, UserProfile } from '../types';
 import { generatePurchaseOrderPDF } from '../utils/pdfGenerator';
@@ -37,35 +34,24 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
   onCreatePurchaseOrder,
   onReceivePurchaseOrder
 }) => {
-  // Find products below or equal to min stock
-  const lowStockProducts = products.filter(p => p.cantidadActual <= p.minStock);
+  // Low stock products (minStock > 0 and cantidadActual <= minStock)
+  const lowStockProducts = products.filter(p => p.minStock > 0 && p.cantidadActual <= p.minStock);
 
-  // Custom added products that were manually searched
-  const [customSkus, setCustomSkus] = useState<string[]>([]);
+  // Map of SKU to assigned quantity (defaults to 0 for all products)
+  const [requestedQuantities, setRequestedQuantities] = useState<{ [sku: string]: number }>({});
+
+  // Searcher inputs
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [selectedSearchSku, setSelectedSearchSku] = useState('');
-  const [addQtyInput, setAddQtyInput] = useState<number>(5);
-
-  // Selected SKUs map to quantity to order
-  const [selectedItems, setSelectedItems] = useState<{ [sku: string]: { selected: boolean; qty: number } }>(() => {
-    const initial: { [sku: string]: { selected: boolean; qty: number } } = {};
-    lowStockProducts.forEach(p => {
-      const suggested = Math.max(1, (p.minStock * 2) - p.cantidadActual);
-      initial[p.sku] = { selected: true, qty: suggested };
-    });
-    return initial;
-  });
+  const [addQtyInput, setAddQtyInput] = useState<number>(1);
 
   const [supplierName, setSupplierRef] = useState('Proveedor Principal de Grupo Más Digital');
-  const [orderNotes, setNotes] = useState('Pedido urgente para reabastecimiento de almacén.');
+  const [orderNotes, setNotes] = useState('Pedido para reabastecimiento de almacén.');
   const [isCreating, setIsCreating] = useState(false);
   const [receivingOrderId, setReceivingOrderId] = useState<string | null>(null);
 
-  // Combine low stock products and manually added products
-  const displayProducts = [
-    ...lowStockProducts,
-    ...products.filter(p => customSkus.includes(p.sku) && !lowStockProducts.some(lsp => lsp.sku === p.sku))
-  ];
+  // Filter products that have assigned quantity >= 1
+  const activeOrderProducts = products.filter(p => (requestedQuantities[p.sku] || 0) >= 1);
 
   const handleSearchSkuChange = (query: string) => {
     setProductSearchQuery(query);
@@ -77,75 +63,64 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
     }
   };
 
-  const handleAddCustomProduct = () => {
+  const handleAddProductToOrder = () => {
     const targetSku = selectedSearchSku || products.find(p => p.sku.toLowerCase() === productSearchQuery.trim().toLowerCase())?.sku;
     if (!targetSku) return;
 
-    if (!customSkus.includes(targetSku)) {
-      setCustomSkus(prev => [...prev, targetSku]);
-    }
-
-    setSelectedItems(prev => ({
+    const qtyToAdd = Math.max(1, addQtyInput || 1);
+    setRequestedQuantities(prev => ({
       ...prev,
-      [targetSku]: { selected: true, qty: addQtyInput || 5 }
+      [targetSku]: (prev[targetSku] || 0) + qtyToAdd
     }));
 
     setProductSearchQuery('');
     setSelectedSearchSku('');
-    setAddQtyInput(5);
+    setAddQtyInput(1);
   };
 
-  const toggleSelect = (sku: string) => {
-    setSelectedItems(prev => {
-      const current = prev[sku] || { selected: false, qty: 5 };
-      return {
-        ...prev,
-        [sku]: { ...current, selected: !current.selected }
-      };
+  const handlePopulateLowStockSuggestions = () => {
+    const nextMap = { ...requestedQuantities };
+    lowStockProducts.forEach(p => {
+      const suggested = Math.max(1, (p.minStock * 2) - p.cantidadActual);
+      nextMap[p.sku] = suggested;
     });
+    setRequestedQuantities(nextMap);
   };
 
-  const updateQty = (sku: string, qty: number) => {
-    setSelectedItems(prev => ({
+  const handleUpdateQty = (sku: string, qty: number) => {
+    const validQty = Math.max(0, qty);
+    setRequestedQuantities(prev => ({
       ...prev,
-      [sku]: { ...(prev[sku] || { selected: true }), qty: Math.max(1, qty) }
+      [sku]: validQty
     }));
   };
 
-  const selectAll = () => {
-    const next: { [sku: string]: { selected: boolean; qty: number } } = {};
-    displayProducts.forEach(p => {
-      const existingQty = selectedItems[p.sku]?.qty || Math.max(1, (p.minStock * 2) - p.cantidadActual);
-      next[p.sku] = { selected: true, qty: existingQty };
-    });
-    setSelectedItems(next);
+  const handleRemoveProductFromOrder = (sku: string) => {
+    setRequestedQuantities(prev => ({
+      ...prev,
+      [sku]: 0
+    }));
   };
 
-  const deselectAll = () => {
-    const next: { [sku: string]: { selected: boolean; qty: number } } = {};
-    displayProducts.forEach(p => {
-      next[p.sku] = { selected: false, qty: selectedItems[p.sku]?.qty || 5 };
-    });
-    setSelectedItems(next);
+  const handleClearAll = () => {
+    setRequestedQuantities({});
   };
 
-  // Filter chosen items
-  const itemsToOrder: PurchaseOrderItem[] = displayProducts
-    .filter(p => selectedItems[p.sku]?.selected)
-    .map(p => {
-      const qty = selectedItems[p.sku]?.qty || 1;
-      return {
-        sku: p.sku,
-        descripcion: p.descripcion,
-        medida: p.medida,
-        unidad: p.unidad,
-        cantidadActual: p.cantidadActual,
-        minStock: p.minStock,
-        cantidadSugerida: Math.max(1, (p.minStock * 2) - p.cantidadActual),
-        cantidadPedida: qty,
-        costoEstimado: p.costo || p.precio
-      };
-    });
+  // Convert active order products to PurchaseOrderItems
+  const itemsToOrder: PurchaseOrderItem[] = activeOrderProducts.map(p => {
+    const qty = requestedQuantities[p.sku] || 1;
+    return {
+      sku: p.sku,
+      descripcion: p.descripcion,
+      medida: p.medida,
+      unidad: p.unidad,
+      cantidadActual: p.cantidadActual,
+      minStock: p.minStock,
+      cantidadSugerida: Math.max(1, (p.minStock * 2) - p.cantidadActual),
+      cantidadPedida: qty,
+      costoEstimado: p.costo || p.precio
+    };
+  });
 
   const totalEstimatedCost = itemsToOrder.reduce((sum, item) => sum + (item.cantidadPedida * item.costoEstimado), 0);
   const totalItemsCount = itemsToOrder.reduce((acc, i) => acc + i.cantidadPedida, 0);
@@ -190,8 +165,11 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
 
       await onCreatePurchaseOrder(orderPayload);
       
-      // Auto download PDF as well!
+      // Auto download PDF
       generatePurchaseOrderPDF({ id: folio, ...orderPayload });
+
+      // Reset active quantities after successful order creation
+      setRequestedQuantities({});
 
     } catch (err) {
       console.error(err);
@@ -221,16 +199,26 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
             <AlertTriangle className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-white">Agilizador de Pedidos de Material Faltante</h1>
+            <h1 className="text-xl font-extrabold text-white">Pedidos de Material de Almacén</h1>
             <p className="text-red-200 text-xs mt-0.5">
-              Identificación automática de stock bajo, cálculo de sugeridos y generación instantánea de Solicitudes de Compra en PDF.
+              Crea tu pedido agregando únicamente las cantidades necesarias (los productos en 0 permanecen ocultos).
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <span className="text-xs bg-red-900/80 text-red-200 font-bold px-3 py-1.5 rounded-lg border border-red-700">
-            {lowStockProducts.length} SKUs con Alerta de Stock Bajo
+        <div className="flex flex-wrap items-center gap-2">
+          {lowStockProducts.length > 0 && (
+            <button
+              onClick={handlePopulateLowStockSuggestions}
+              className="flex items-center space-x-1.5 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-bounce" />
+              <span>Cargar {lowStockProducts.length} Faltantes Sugeridos</span>
+            </button>
+          )}
+
+          <span className="text-xs bg-red-900/80 text-red-200 font-bold px-3 py-2 rounded-xl border border-red-700">
+            {activeOrderProducts.length} SKU(s) en Solicitud
           </span>
         </div>
       </div>
@@ -238,22 +226,23 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Column: Reorder Checklist (2 cols) */}
+        {/* Left Column: Product Picker & Active Items Table (2 cols) */}
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          {/* Product Searcher Bar */}
+          
+          {/* Add Product Searcher Bar */}
           <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2">
-            <label className="block text-slate-800 font-bold text-xs">
-              Buscador de Productos (Catálogo de {products.length} SKUs):
+            <label className="block text-slate-800 font-extrabold text-xs">
+              Buscador y Selección de Material ({products.length} SKUs Disponibles):
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
               <div className="sm:col-span-6 relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Escriba SKU o nombre para buscar..."
+                  placeholder="Escriba SKU o nombre del material..."
                   value={productSearchQuery}
                   onChange={(e) => handleSearchSkuChange(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg font-medium text-slate-900"
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg font-medium text-slate-900 focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
@@ -261,7 +250,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                 <select
                   value={selectedSearchSku}
                   onChange={(e) => setSelectedSearchSku(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium"
+                  className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:ring-2 focus:ring-red-500"
                 >
                   <option value="">-- Seleccionar producto --</option>
                   {products
@@ -281,11 +270,11 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                   min="1"
                   value={addQtyInput}
                   onChange={(e) => setAddQtyInput(parseInt(e.target.value) || 1)}
-                  className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-center font-bold text-slate-900"
+                  className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-center font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
                 />
                 <button
                   type="button"
-                  onClick={handleAddCustomProduct}
+                  onClick={handleAddProductToOrder}
                   disabled={!selectedSearchSku && !productSearchQuery}
                   className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer disabled:opacity-50"
                 >
@@ -296,71 +285,67 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          {/* Active Items Header */}
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
-              <h2 className="font-bold text-slate-900 text-base">Material por Reponer</h2>
-              <p className="text-slate-500 text-xs">Seleccione los SKUs que desea incluir en esta orden de compra</p>
+              <h2 className="font-bold text-slate-900 text-base flex items-center space-x-2">
+                <ShoppingCart className="w-4 h-4 text-red-600" />
+                <span>Productos en el Pedido de Material</span>
+              </h2>
+              <p className="text-slate-500 text-xs">
+                Se muestran únicamente los productos con cantidad asignada &ge; 1 pieza.
+              </p>
             </div>
 
-            <div className="flex space-x-2">
+            {activeOrderProducts.length > 0 && (
               <button
-                onClick={selectAll}
-                className="text-xs text-cyan-600 hover:text-cyan-700 font-bold underline"
+                onClick={handleClearAll}
+                className="text-xs text-red-600 hover:text-red-700 font-bold underline cursor-pointer"
               >
-                Seleccionar todos
+                Limpiar lista (volver a 0)
               </button>
-              <span className="text-slate-300">|</span>
-              <button
-                onClick={deselectAll}
-                className="text-xs text-slate-500 hover:text-slate-700 font-medium"
-              >
-                Deseleccionar
-              </button>
-            </div>
+            )}
           </div>
 
+          {/* Active Order Items List */}
           <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
-            {displayProducts.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                <p className="font-bold text-slate-700 text-sm">¡Inventario Excelente!</p>
-                <p className="text-xs text-slate-500">Use el buscador arriba para agregar productos al pedido de material.</p>
+            {activeOrderProducts.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 space-y-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6">
+                <Layers className="w-10 h-10 text-slate-300 mx-auto" />
+                <p className="font-extrabold text-slate-700 text-sm">No hay productos en el pedido actual</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Por defecto todos los productos están en 0. Busca y agrega SKUs desde la barra superior o haz clic en "Cargar Faltantes Sugeridos".
+                </p>
               </div>
             ) : (
-              displayProducts.map((p, idx) => {
-                const isSelected = selectedItems[p.sku]?.selected ?? true;
-                const currentQty = selectedItems[p.sku]?.qty ?? Math.max(1, (p.minStock * 2) - p.cantidadActual);
+              activeOrderProducts.map((p, idx) => {
+                const currentQty = requestedQuantities[p.sku] || 1;
 
                 return (
                   <div
                     key={`${p.sku}-${idx}`}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                      isSelected ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-200 opacity-60'
-                    }`}
+                    className="p-3.5 rounded-xl border bg-red-50/20 border-red-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
                   >
                     {/* Item info */}
                     <div className="flex items-start space-x-3">
                       <button
                         type="button"
-                        onClick={() => toggleSelect(p.sku)}
-                        className="mt-1 text-slate-600 hover:text-red-600 transition-colors"
+                        onClick={() => handleRemoveProductFromOrder(p.sku)}
+                        className="mt-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                        title="Quitar producto (dejar cantidad en 0)"
                       >
-                        {isSelected ? (
-                          <CheckSquare className="w-5 h-5 text-red-600" />
-                        ) : (
-                          <Square className="w-5 h-5 text-slate-400" />
-                        )}
+                        <Trash2 className="w-4 h-4" />
                       </button>
 
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-slate-900 text-sm">{p.sku}</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-800">
-                            {p.cantidadActual === 0 ? 'AGOTADO (0)' : `Stock: ${p.cantidadActual}`}
+                          <span className="font-black text-slate-900 text-sm">{p.sku}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+                            Existencia Actual: {p.cantidadActual}
                           </span>
-                          <span className="text-[10px] text-slate-500">Min: {p.minStock}</span>
+                          <span className="text-[10px] text-slate-500 font-semibold">Min: {p.minStock}</span>
                         </div>
-                        <p className="text-xs text-slate-700 font-medium mt-0.5 max-w-md line-clamp-1">
+                        <p className="text-xs text-slate-800 font-semibold mt-0.5 max-w-md line-clamp-1">
                           {p.descripcion}
                         </p>
                         <div className="text-[10px] text-slate-400 mt-0.5">
@@ -369,23 +354,22 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                       </div>
                     </div>
 
-                    {/* Quantity Picker */}
-                    <div className="flex items-center space-x-3 pl-8 sm:pl-0">
+                    {/* Quantity Picker & Total */}
+                    <div className="flex items-center space-x-3 pl-7 sm:pl-0">
                       <div className="text-right">
-                        <label className="block text-[10px] text-slate-500 font-bold">Cant. Pedida</label>
+                        <label className="block text-[10px] text-slate-600 font-extrabold">Cant. Solicitada</label>
                         <input
                           type="number"
-                          min="1"
-                          disabled={!isSelected}
+                          min="0"
                           value={currentQty}
-                          onChange={(e) => updateQty(p.sku, parseInt(e.target.value) || 1)}
-                          className="w-20 px-2 py-1 border border-slate-300 rounded-lg text-xs font-bold text-center text-slate-900 bg-white focus:ring-2 focus:ring-red-500"
+                          onChange={(e) => handleUpdateQty(p.sku, parseInt(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 border border-slate-300 rounded-lg text-xs font-black text-center text-slate-900 bg-white focus:ring-2 focus:ring-red-500 shadow-xs"
                         />
                       </div>
 
-                      <div className="text-right min-w-[80px]">
-                        <span className="block text-[10px] text-slate-400">Costo Est.</span>
-                        <span className="font-bold text-xs text-slate-900">
+                      <div className="text-right min-w-[85px]">
+                        <span className="block text-[10px] text-slate-400 font-semibold">Costo Est.</span>
+                        <span className="font-extrabold text-xs text-slate-900">
                           ${((p.costo || p.precio) * currentQty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -408,13 +392,13 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
           <div className="space-y-3 text-xs">
             <div className="p-3 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
               <div className="flex justify-between font-bold text-slate-700">
-                <span>Items Seleccionados:</span>
-                <span className="text-slate-900">{itemsToOrder.length} productos</span>
+                <span>SKUs Solicitados:</span>
+                <span className="text-slate-900 font-extrabold">{itemsToOrder.length} productos</span>
               </div>
               <div className="flex justify-between font-bold text-slate-700">
                 <span>Piezas Totales:</span>
-                <span className="text-slate-900">
-                  {itemsToOrder.reduce((acc, i) => sumAcc(acc, i.cantidadPedida), 0)} unidades
+                <span className="text-slate-900 font-extrabold">
+                  {totalItemsCount} unidades
                 </span>
               </div>
               <div className="flex justify-between text-base font-extrabold text-slate-900 border-t border-slate-200 pt-2">
@@ -431,7 +415,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                 type="text"
                 value={supplierName}
                 onChange={(e) => setSupplierRef(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 text-slate-900"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 text-slate-900 font-medium"
               />
             </div>
 
@@ -441,7 +425,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                 rows={2}
                 value={orderNotes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 text-slate-900"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 text-slate-900 font-medium"
               />
             </div>
 
@@ -535,7 +519,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                       <button
                         onClick={() => generatePurchaseOrderPDF(order)}
                         title="Re-descargar PDF"
-                        className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200"
+                        className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5" />
                       </button>
@@ -544,7 +528,7 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                         <button
                           onClick={() => handleReceive(order)}
                           disabled={receivingOrderId === order.id}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px]"
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] cursor-pointer disabled:opacity-50"
                         >
                           {receivingOrderId === order.id ? 'Recibiendo...' : 'Marcar Recibido'}
                         </button>
@@ -561,7 +545,3 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
     </div>
   );
 };
-
-function sumAcc(acc: number, val: number) {
-  return acc + val;
-}

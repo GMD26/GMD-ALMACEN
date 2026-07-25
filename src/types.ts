@@ -157,10 +157,12 @@ export interface PedidoMercadoLibre {
   id: string;
   numPedidoML: string;
   clienteML: string;
+  sku?: string;
   descripcionProducto: string;
   cantidad: number;
   pedidoAKronaline: boolean;
   entregado: boolean;
+  cancelado?: boolean;
   fecha: string;
   notas?: string;
   createdAt: string;
