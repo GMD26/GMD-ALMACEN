@@ -51,6 +51,7 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
   const [total, setTotal] = useState<number>(0);
   const [fechaCotizacion, setFechaCotizacion] = useState<string>(new Date().toISOString().split('T')[0]);
   const [partidas, setPartidas] = useState<CotizacionItem[]>([]);
+  const [facturado, setFacturado] = useState<boolean>(false);
   const [notas, setNotas] = useState('');
   const [cotizacionPdfName, setCotizacionPdfName] = useState('');
   const [cotizacionPdfUrl, setCotizacionPdfUrl] = useState('');
@@ -86,6 +87,7 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
     setTotal(0);
     setFechaCotizacion(new Date().toISOString().split('T')[0]);
     setPartidas([]);
+    setFacturado(false);
     setNotas('');
     setCotizacionPdfName('');
     setCotizacionPdfUrl('');
@@ -121,7 +123,15 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
           if (extracted.subtotal) setSubtotal(extracted.subtotal);
           if (extracted.iva) setIva(extracted.iva);
           if (extracted.total) setTotal(extracted.total);
-          if (extracted.resumen) setResumen(extracted.resumen);
+          
+          if (extracted.resumen) {
+            setResumen(extracted.resumen);
+          } else if (extracted.partidas && extracted.partidas.length > 0) {
+            setResumen(extracted.partidas.map(p => `${p.cantidad}x ${p.descripcion}`).join(', '));
+          } else if (extracted.folioCotizacion) {
+            setResumen(`Cotización ${extracted.folioCotizacion}`);
+          }
+
           if (extracted.partidas && extracted.partidas.length > 0) {
             setPartidas(extracted.partidas);
           }
@@ -140,23 +150,32 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cliente || !resumen) return;
+    const finalCliente = cliente.trim() || 'Cliente Cotización';
+    let finalResumen = resumen.trim();
+    if (!finalResumen) {
+      if (partidas.length > 0) {
+        finalResumen = partidas.map(p => `${p.cantidad}x ${p.descripcion}`).join(', ');
+      } else {
+        finalResumen = `Cotización ${folioCotizacion || 'S/N'}`;
+      }
+    }
 
     setIsSubmitting(true);
     try {
       await onAddPedido({
         responsable,
-        folioCotizacion,
-        cliente,
-        resumen,
+        folioCotizacion: folioCotizacion || `COT-${Date.now().toString().slice(-5)}`,
+        cliente: finalCliente,
+        resumen: finalResumen,
         subtotal: subtotal || undefined,
         iva: iva || undefined,
-        total,
+        total: total || 0,
         partidas: partidas.length > 0 ? partidas : undefined,
         pagado: false,
         pendientePorPedir: true,
         guiaGenerada: false,
         pedidoCompletado: false,
+        facturado,
         cotizacionPdfUrl: cotizacionPdfUrl || undefined,
         cotizacionNombreArchivo: cotizacionPdfName || undefined,
         fecha: fechaCotizacion || new Date().toISOString(),
@@ -164,8 +183,9 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
         createdAt: new Date().toISOString()
       });
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert('Error al crear el pedido: ' + (err?.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
@@ -260,6 +280,7 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                 <th className="py-3 px-4 text-center">Pagado</th>
                 <th className="py-3 px-4 text-center">Pendiente por Pedir</th>
                 <th className="py-3 px-4 text-center">Guía Generada</th>
+                <th className="py-3 px-4 text-center bg-purple-950 text-purple-300">Facturado</th>
                 <th className="py-3 px-4 text-center">Pedido Completado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
@@ -267,7 +288,7 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                  <td colSpan={10} className="text-center py-12 text-slate-400">
                     No hay pedidos registrados para {responsable} en este estatus. Haga clic en "Nueva Cotización / Pedido".
                   </td>
                 </tr>
@@ -391,6 +412,20 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                               </a>
                             )}
                           </div>
+                        </td>
+
+                        {/* Facturado Checkbox */}
+                        <td className="py-3 px-4 text-center bg-purple-50/50">
+                          <button
+                            onClick={() => onUpdatePedido(pedido.id, { facturado: !pedido.facturado })}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                              pedido.facturado
+                                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-400'
+                                : 'bg-white border border-slate-300 text-slate-500 hover:border-purple-400'
+                            }`}
+                          >
+                            {pedido.facturado ? '✓ Facturado' : 'Sin Facturar'}
+                          </button>
                         </td>
 
                         {/* Pedido Completado */}
@@ -599,11 +634,10 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
               </div>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1">Resumen de Material / Productos *</label>
+                <label className="block text-slate-700 font-bold mb-1">Resumen de Material / Productos</label>
                 <textarea
-                  rows={3}
-                  required
-                  placeholder="Detalle de SKUs, cantidades, precios..."
+                  rows={2}
+                  placeholder="Detalle de SKUs, cantidades, precios (se auto-genera desde el PDF si no se captura)..."
                   value={resumen}
                   onChange={(e) => setResumen(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500"
@@ -637,6 +671,18 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
                   onChange={(e) => setNotas(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500"
                 />
+              </div>
+
+              <div className="pt-1 border-t border-slate-100">
+                <label className="flex items-center space-x-2 text-purple-800 font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={facturado}
+                    onChange={(e) => setFacturado(e.target.checked)}
+                    className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4"
+                  />
+                  <span>Facturado</span>
+                </label>
               </div>
 
               <div className="flex space-x-2 pt-2">

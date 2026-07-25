@@ -42,19 +42,53 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
     'Costo'
   ];
 
-  const filteredItems = listasPrecios.filter(item => {
+  // Factors for calculating real prices dynamically if specific category items are not in DB
+  const getFactorForCategory = (catName: string): number => {
+    const cat = catName.trim().toLowerCase();
+    if (cat === 'precio más iva' || cat === '1.16') return 1.16;
+    if (cat === 'precio descuento') return 0.90;
+    if (cat === '1.14') return 1.14;
+    if (cat === '1.2798') return 1.2798;
+    if (cat === 'costo') return 0.70;
+    return 1.0;
+  };
+
+  const directFiltered = listasPrecios.filter(item => {
     const catClean = (item.categoria || '').trim().toLowerCase();
     const filterClean = categoryFilter.trim().toLowerCase();
 
-    const matchesCat = categoryFilter === 'ALL' || 
-      catClean === filterClean || 
-      catClean.includes(filterClean) ||
-      filterClean.includes(catClean);
-
+    const matchesCat = categoryFilter === 'ALL' || catClean === filterClean;
     const matchesSearch = (item.descripcion || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       catClean.includes(searchTerm.toLowerCase());
     return matchesCat && matchesSearch;
   });
+
+  // Dynamic fallback from products catalog if filter has no records in listasPrecios
+  let filteredItems: PrecioListaItem[] = directFiltered;
+
+  if (filteredItems.length === 0 && categoryFilter !== 'ALL' && products.length > 0) {
+    const factor = getFactorForCategory(categoryFilter);
+    filteredItems = products
+      .filter(p => {
+        const fullDesc = `[${p.sku}] ${p.descripcion}`.toLowerCase();
+        return !searchTerm || fullDesc.includes(searchTerm.toLowerCase());
+      })
+      .map(p => {
+        let pVal = p.precio || 0;
+        if (categoryFilter.toLowerCase() === 'costo' && p.costo) {
+          pVal = p.costo;
+        } else {
+          pVal = Math.round(pVal * factor * 100) / 100;
+        }
+        return {
+          id: `derived-${p.id}-${categoryFilter}`,
+          categoria: categoryFilter,
+          precio: pVal,
+          descripcion: `[${p.sku}] ${p.descripcion}`,
+          updatedAt: new Date().toISOString()
+        };
+      });
+  }
 
   const handleOpenAddModal = () => {
     setEditingItem(null);

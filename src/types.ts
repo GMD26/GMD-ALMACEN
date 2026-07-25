@@ -164,6 +164,7 @@ export interface PedidoMercadoLibre {
   pedidoAKronaline: boolean;
   entregado: boolean;
   cancelado?: boolean;
+  facturado?: boolean;
   fecha: string;
   notas?: string;
   createdAt: string;
@@ -195,6 +196,7 @@ export interface CotizacionPedido {
   guiaPdfUrl?: string;
   guiaNombreArchivo?: string;
   pedidoCompletado: boolean;
+  facturado?: boolean;
   cotizacionPdfUrl?: string;
   cotizacionNombreArchivo?: string;
   fecha: string;
@@ -213,6 +215,7 @@ export interface PedidoWeb {
   pedidoKronaline: boolean;
   guiaGenerada: boolean;
   completado: boolean;
+  facturado?: boolean;
   notas?: string;
   createdAt: string;
 }

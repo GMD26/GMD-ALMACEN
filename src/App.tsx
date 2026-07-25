@@ -764,19 +764,50 @@ export default function App() {
   const handleSyncPreciosFromCatalog = async () => {
     try {
       const now = new Date().toISOString();
-      const batch = writeBatch(db);
+      const categories = [
+        { name: 'Precio', factor: 1 },
+        { name: 'Precio más IVA', factor: 1.16 },
+        { name: 'Precio descuento', factor: 0.90 },
+        { name: '1.14', factor: 1.14 },
+        { name: '1.16', factor: 1.16 },
+        { name: '1.2798', factor: 1.2798 },
+        { name: 'Costo', factor: 0.70 }
+      ];
+
+      const allItemsToSet: { docRef: any; data: any }[] = [];
 
       products.forEach(p => {
-        const docRef = doc(collection(db, 'listas_precios'));
-        batch.set(docRef, {
-          categoria: p.categoria || 'Consumibles GMD',
-          precio: p.precio || 0,
-          descripcion: `[${p.sku}] ${p.descripcion}`,
-          updatedAt: now
+        const basePrice = p.precio || 0;
+        const sku = p.sku || 'SKU';
+        const desc = p.descripcion || '';
+
+        categories.forEach(cat => {
+          let calculatedPrice = basePrice * cat.factor;
+          if (cat.name === 'Costo' && p.costo) {
+            calculatedPrice = p.costo;
+          }
+          calculatedPrice = Math.round(calculatedPrice * 100) / 100;
+
+          const docRef = doc(collection(db, 'listas_precios'));
+          allItemsToSet.push({
+            docRef,
+            data: {
+              categoria: cat.name,
+              precio: calculatedPrice,
+              descripcion: `[${sku}] ${desc}`,
+              updatedAt: now
+            }
+          });
         });
       });
 
-      await batch.commit();
+      // Commit in batches of max 400 operations
+      for (let i = 0; i < allItemsToSet.length; i += 400) {
+        const batch = writeBatch(db);
+        const chunk = allItemsToSet.slice(i, i + 400);
+        chunk.forEach(item => batch.set(item.docRef, item.data));
+        await batch.commit();
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'listas_precios');
       throw err;
@@ -797,7 +828,7 @@ export default function App() {
     }
   };
 
-  const handleToggleCampoML = async (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado', value: boolean) => {
+  const handleToggleCampoML = async (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado' | 'facturado', value: boolean) => {
     try {
       const ref = doc(db, 'pedidos_ml', id);
       await updateDoc(ref, { [field]: value });

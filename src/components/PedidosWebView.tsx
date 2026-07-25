@@ -65,19 +65,26 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
   const [sku, setSku] = useState('');
   const [cantidad, setCantidad] = useState<number>(1);
   const [direccionEnvio, setDireccionEnvio] = useState('');
+  const [facturado, setFacturado] = useState<boolean>(false);
   const [notas, setNotas] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredPedidos = pedidos.filter(p => {
-    const matchesSearch = 
-      p.numPedido.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.direccionEnvio.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredPedidos = pedidos
+    .filter(p => {
+      const matchesSearch = 
+        p.numPedido.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.direccionEnvio.toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (statusFilter === 'COMPLETADOS') return matchesSearch && p.completado;
-    if (statusFilter === 'PENDIENTES') return matchesSearch && !p.completado;
-    return matchesSearch;
-  });
+      if (statusFilter === 'COMPLETADOS') return matchesSearch && p.completado;
+      if (statusFilter === 'PENDIENTES') return matchesSearch && !p.completado;
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.fechaPedido || a.createdAt || 0).getTime();
+      const dateB = new Date(b.fechaPedido || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
 
   const handleOpenModal = () => {
     setNumPedido(`WEB-${Date.now().toString().slice(-5)}`);
@@ -85,6 +92,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
     setSku('');
     setCantidad(1);
     setDireccionEnvio('');
+    setFacturado(false);
     setNotas('');
     setIsModalOpen(true);
   };
@@ -213,6 +221,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
         pedidoKronaline: false,
         guiaGenerada: false,
         completado: false,
+        facturado,
         notas: notas || undefined,
         createdAt: new Date().toISOString()
       });
@@ -423,6 +432,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                 <th className="py-3 px-4 text-center">Recibido</th>
                 <th className="py-3 px-4 text-center">Pedido Kronaline</th>
                 <th className="py-3 px-4 text-center">Guía</th>
+                <th className="py-3 px-4 text-center bg-purple-950 text-purple-300">Facturado</th>
                 <th className="py-3 px-4 text-center">Completado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
@@ -430,7 +440,7 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-slate-400">
+                  <td colSpan={11} className="text-center py-12 text-slate-400">
                     No hay pedidos web registrados en este filtro. Haga clic en "Sincronizar API WooCommerce", importe desde CSV o agregue un pedido.
                   </td>
                 </tr>
@@ -497,6 +507,20 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                         }`}
                       >
                         {pedido.guiaGenerada ? '✓ Generada' : 'Pendiente'}
+                      </button>
+                    </td>
+
+                    {/* Facturado */}
+                    <td className="py-3 px-4 text-center bg-purple-50/50">
+                      <button
+                        onClick={() => onUpdatePedido(pedido.id, { facturado: !pedido.facturado })}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          pedido.facturado
+                            ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-400'
+                            : 'bg-white border border-slate-300 text-slate-500 hover:border-purple-400'
+                        }`}
+                      >
+                        {pedido.facturado ? '✓ Facturado' : 'Sin Facturar'}
                       </button>
                     </td>
 
@@ -694,6 +718,18 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                   onChange={(e) => setNotas(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div className="pt-1 border-t border-slate-100">
+                <label className="flex items-center space-x-2 text-purple-800 font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={facturado}
+                    onChange={(e) => setFacturado(e.target.checked)}
+                    className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4"
+                  />
+                  <span>Facturado</span>
+                </label>
               </div>
 
               <div className="flex space-x-2 pt-2">

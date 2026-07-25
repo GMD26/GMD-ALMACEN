@@ -6,7 +6,7 @@ import { PedidoMercadoLibre } from '../types';
 interface PedidosMercadoLibreViewProps {
   pedidosML: PedidoMercadoLibre[];
   onAddPedidoML: (pedido: Omit<PedidoMercadoLibre, 'id' | 'createdAt'>) => Promise<void>;
-  onToggleCampoML: (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado', value: boolean) => Promise<void>;
+  onToggleCampoML: (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado' | 'facturado', value: boolean) => Promise<void>;
   onDeletePedidoML: (id: string) => Promise<void>;
 }
 
@@ -33,23 +33,30 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
   const [pedidoAKronaline, setPedidoAKronaline] = useState<boolean>(false);
   const [entregado, setEntregado] = useState<boolean>(false);
   const [cancelado, setCancelado] = useState<boolean>(false);
+  const [facturado, setFacturado] = useState<boolean>(false);
   const [notas, setNotas] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredPedidos = pedidosML.filter(p => {
-    const matchesSearch = 
-      p.numPedidoML.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.clienteML.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.descripcionProducto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredPedidos = pedidosML
+    .filter(p => {
+      const matchesSearch = 
+        p.numPedidoML.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.clienteML.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.descripcionProducto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    let matchesStatus = true;
-    if (statusFilter === 'CANCELLED') matchesStatus = !!p.cancelado;
-    else if (statusFilter === 'DELIVERED') matchesStatus = !!p.entregado && !p.cancelado;
-    else if (statusFilter === 'ACTIVE') matchesStatus = !p.cancelado && !p.entregado;
+      let matchesStatus = true;
+      if (statusFilter === 'CANCELLED') matchesStatus = !!p.cancelado;
+      else if (statusFilter === 'DELIVERED') matchesStatus = !!p.entregado && !p.cancelado;
+      else if (statusFilter === 'ACTIVE') matchesStatus = !p.cancelado && !p.entregado;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.fecha || a.createdAt || 0).getTime();
+      const dateB = new Date(b.fecha || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -146,6 +153,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
         pedidoAKronaline,
         entregado,
         cancelado,
+        facturado,
         fecha: new Date().toISOString(),
         notas
       });
@@ -158,6 +166,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
       setPedidoAKronaline(false);
       setEntregado(false);
       setCancelado(false);
+      setFacturado(false);
       setNotas('');
       setIsModalOpen(false);
     } catch (err) {
@@ -286,6 +295,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                 <th className="py-3 px-4 text-center">Cant.</th>
                 <th className="py-3 px-4 text-center bg-amber-950 text-amber-300">Pedido a Kronaline</th>
                 <th className="py-3 px-4 text-center bg-emerald-950 text-emerald-300">Entregado</th>
+                <th className="py-3 px-4 text-center bg-purple-950 text-purple-300">Facturado</th>
                 <th className="py-3 px-4 text-center bg-red-950 text-red-300">Estado / Cancelado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
@@ -293,7 +303,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-400">
+                  <td colSpan={9} className="text-center py-12 text-slate-400">
                     No hay pedidos de Mercado Libre registrados en este filtro.
                   </td>
                 </tr>
@@ -365,6 +375,22 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                       >
                         {p.entregado ? <CheckSquare className="w-4 h-4 text-white" /> : <Square className="w-4 h-4 text-slate-400" />}
                         <span>{p.entregado ? 'Entregado' : 'Por Entregar'}</span>
+                      </button>
+                    </td>
+
+                    {/* Facturado Column */}
+                    <td className="py-3 px-4 text-center bg-purple-50/50">
+                      <button
+                        onClick={() => onToggleCampoML(p.id, 'facturado', !p.facturado)}
+                        disabled={p.cancelado}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 ${
+                          p.facturado
+                            ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-400'
+                            : 'bg-white border border-slate-300 text-slate-500 hover:border-purple-400'
+                        }`}
+                      >
+                        {p.facturado ? <CheckSquare className="w-4 h-4 text-white" /> : <Square className="w-4 h-4 text-slate-400" />}
+                        <span>{p.facturado ? 'Facturado' : 'Sin Facturar'}</span>
                       </button>
                     </td>
 
@@ -478,7 +504,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                 />
               </div>
 
-              {/* Checkboxes Kronaline, Entregado, Cancelado */}
+              {/* Checkboxes Kronaline, Entregado, Facturado, Cancelado */}
               <div className="space-y-2 pt-1 border-t border-slate-100">
                 <label className="flex items-center space-x-2 text-slate-800 font-bold cursor-pointer">
                   <input
@@ -498,6 +524,16 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                     className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                   />
                   <span>Entregado</span>
+                </label>
+
+                <label className="flex items-center space-x-2 text-purple-800 font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={facturado}
+                    onChange={(e) => setFacturado(e.target.checked)}
+                    className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4"
+                  />
+                  <span>Facturado</span>
                 </label>
 
                 <label className="flex items-center space-x-2 text-red-700 font-bold cursor-pointer">
