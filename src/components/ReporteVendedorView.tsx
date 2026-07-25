@@ -15,7 +15,7 @@ export const ReporteVendedorView: React.FC<ReporteVendedorViewProps> = ({
   pedidosEspeciales,
   movements
 }) => {
-  const [selectedVendor, setSelectedVendor] = useState<'Luis' | 'Manuel' | 'César'>('Luis');
+  const [selectedVendor, setSelectedVendor] = useState<'Luis' | 'Manuel' | 'César' | 'Mostrador'>('Luis');
 
   // Calculate Summary for ALL Vendors
   const VENDORS_LIST = ['Luis', 'Manuel', 'César', 'Mostrador', 'Mercado Libre'];
@@ -79,12 +79,13 @@ export const ReporteVendedorView: React.FC<ReporteVendedorViewProps> = ({
           <span className="text-xs text-slate-300 font-bold px-2">Detalle de:</span>
           <select
             value={selectedVendor}
-            onChange={(e) => setSelectedVendor(e.target.value as 'Luis' | 'Manuel' | 'César')}
+            onChange={(e) => setSelectedVendor(e.target.value as any)}
             className="bg-cyan-500 text-slate-950 font-black text-xs px-3 py-1.5 rounded-lg border-none focus:ring-0 cursor-pointer"
           >
             <option value="Luis">Luis</option>
             <option value="Manuel">Manuel</option>
             <option value="César">César</option>
+            <option value="Mostrador">Mostrador</option>
           </select>
         </div>
       </div>

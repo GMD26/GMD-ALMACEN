@@ -73,9 +73,12 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
     } else if (name === 'Manuel Moreno') {
       setTelefonoVendedor('');
       setWhatsappVendedor('+52 1 222 661 4977');
-    } else if (name === 'Luis Blanno') {
+    } else if (name === 'Luis Blanco' || name === 'Luis Blanno') {
       setTelefonoVendedor('');
       setWhatsappVendedor('+52 1 222 577 1532');
+    } else if (name === 'Mostrador') {
+      setTelefonoVendedor('');
+      setWhatsappVendedor('+52 1 222 581 5351');
     }
   };
 
@@ -432,8 +435,9 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
             className="p-1.5 font-black border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-2 focus:ring-cyan-500 cursor-pointer"
           >
             <option value="Manuel Moreno">Manuel Moreno</option>
-            <option value="Luis Blanno">Luis Blanno</option>
+            <option value="Luis Blanco">Luis Blanco</option>
             <option value="Cesar Garcia">Cesar Garcia</option>
+            <option value="Mostrador">Mostrador</option>
           </select>
         </div>
 
@@ -518,7 +522,7 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
             <span className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase bg-cyan-500 text-slate-950 rounded mb-1 inline-block">
               {documentType}
             </span>
-            <div className="text-xs font-medium text-slate-400">FOLIO NO.</div>
+            <div className="text-xs font-medium text-slate-400">Número de Folio</div>
             <div className="text-2xl font-black text-white tracking-widest my-0.5 font-mono">
               {folio}
             </div>
@@ -790,17 +794,61 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
                         />
                       </td>
 
-                      {/* Precio Unitario Editable */}
+                      {/* Precio Unitario Editable & Flexible Category Selector */}
                       <td className="p-2 text-right">
-                        <div className="relative inline-block w-full">
-                          <span className="absolute left-2 top-2 text-slate-400 font-bold">$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.precioUnitario}
-                            onChange={(e) => handleUpdateItem(item.id, 'precioUnitario', parseFloat(e.target.value) || 0)}
-                            className="w-full pl-5 pr-1 py-1.5 text-right font-extrabold text-slate-900 border border-slate-300 rounded-md bg-slate-50 focus:bg-white"
-                          />
+                        <div className="space-y-1">
+                          <select
+                            onChange={(e) => {
+                              const cat = e.target.value;
+                              if (!cat) return;
+                              const matchedProd = products.find(p => p.sku.toUpperCase() === item.sku.toUpperCase());
+                              let newPrice = item.precioUnitario;
+                              if (matchedProd) {
+                                const base = matchedProd.precio || 0;
+                                const pIva = matchedProd.precioIva || (base * 1.16);
+                                const costo = matchedProd.costo || (base * 0.7);
+                                switch (cat) {
+                                  case 'Precio': newPrice = base; break;
+                                  case 'Precio más IVA': newPrice = pIva; break;
+                                  case 'Precio descuento': newPrice = Math.round(pIva * 0.9 * 100) / 100; break;
+                                  case '1.14': newPrice = Math.round(base * 1.14 * 100) / 100; break;
+                                  case '1.16': newPrice = Math.round(base * 1.16 * 100) / 100; break;
+                                  case '1.2798': newPrice = Math.round(base * 1.2798 * 100) / 100; break;
+                                  case 'Costo': newPrice = costo; break;
+                                }
+                              } else {
+                                const base = item.precioUnitario;
+                                switch (cat) {
+                                  case 'Precio descuento': newPrice = Math.round(base * 0.9 * 100) / 100; break;
+                                  case '1.14': newPrice = Math.round(base * 1.14 * 100) / 100; break;
+                                  case '1.16': newPrice = Math.round(base * 1.16 * 100) / 100; break;
+                                  case '1.2798': newPrice = Math.round(base * 1.2798 * 100) / 100; break;
+                                }
+                              }
+                              handleUpdateItem(item.id, 'precioUnitario', newPrice);
+                            }}
+                            className="w-full text-[10px] p-1 font-semibold text-slate-700 bg-slate-100 border border-slate-300 rounded cursor-pointer print:hidden"
+                          >
+                            <option value="">-- Categoría de Precio --</option>
+                            <option value="Precio">Precio</option>
+                            <option value="Precio más IVA">Precio más IVA</option>
+                            <option value="Precio descuento">Precio descuento (-10%)</option>
+                            <option value="1.14">Factor 1.14</option>
+                            <option value="1.16">Factor 1.16</option>
+                            <option value="1.2798">Factor 1.2798</option>
+                            <option value="Costo">Costo</option>
+                          </select>
+
+                          <div className="relative inline-block w-full">
+                            <span className="absolute left-2 top-2 text-slate-400 font-bold">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.precioUnitario}
+                              onChange={(e) => handleUpdateItem(item.id, 'precioUnitario', parseFloat(e.target.value) || 0)}
+                              className="w-full pl-5 pr-1 py-1.5 text-right font-extrabold text-slate-900 border border-slate-300 rounded-md bg-slate-50 focus:bg-white"
+                            />
+                          </div>
                         </div>
                       </td>
 
