@@ -43,9 +43,16 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
   ];
 
   const filteredItems = listasPrecios.filter(item => {
-    const matchesCat = categoryFilter === 'ALL' || item.categoria === categoryFilter;
-    const matchesSearch = item.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.categoria.toLowerCase().includes(searchTerm.toLowerCase());
+    const catClean = (item.categoria || '').trim().toLowerCase();
+    const filterClean = categoryFilter.trim().toLowerCase();
+
+    const matchesCat = categoryFilter === 'ALL' || 
+      catClean === filterClean || 
+      catClean.includes(filterClean) ||
+      filterClean.includes(catClean);
+
+    const matchesSearch = (item.descripcion || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      catClean.includes(searchTerm.toLowerCase());
     return matchesCat && matchesSearch;
   });
 

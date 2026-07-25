@@ -31,7 +31,9 @@ import {
   Apartado,
   PedidoEspecial,
   PrecioListaItem,
-  PedidoMercadoLibre
+  PedidoMercadoLibre,
+  CotizacionPedido,
+  PedidoWeb
 } from './types';
 import { INITIAL_PRODUCTS } from './data/initialCatalog';
 import { Navbar } from './components/Navbar';
@@ -49,6 +51,8 @@ import { PedidosEspecialesView } from './components/PedidosEspecialesView';
 import { ReporteVendedorView } from './components/ReporteVendedorView';
 import { ListasPreciosView } from './components/ListasPreciosView';
 import { PedidosMercadoLibreView } from './components/PedidosMercadoLibreView';
+import { PedidosCotizacionesView } from './components/PedidosCotizacionesView';
+import { PedidosWebView } from './components/PedidosWebView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('portada');
@@ -61,6 +65,8 @@ export default function App() {
   const [pedidosEspeciales, setPedidosEspeciales] = useState<PedidoEspecial[]>([]);
   const [listasPrecios, setListasPrecios] = useState<PrecioListaItem[]>([]);
   const [pedidosML, setPedidosML] = useState<PedidoMercadoLibre[]>([]);
+  const [pedidosCotizaciones, setPedidosCotizaciones] = useState<CotizacionPedido[]>([]);
+  const [pedidosWeb, setPedidosWeb] = useState<PedidoWeb[]>([]);
   
   // Auth state
   const [user, setUser] = useState<User | null>(null);
@@ -215,6 +221,26 @@ export default function App() {
       setPedidosML(list);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_ml'));
 
+    // Pedidos Cotizaciones (Mónica y César) Listener
+    const cotizacionesRef = collection(db, 'pedidos_cotizaciones');
+    const unsubCotizaciones = onSnapshot(cotizacionesRef, (snapshot) => {
+      const list: CotizacionPedido[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as CotizacionPedido);
+      });
+      setPedidosCotizaciones(list);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_cotizaciones'));
+
+    // Pedidos Web Listener
+    const webRef = collection(db, 'pedidos_web');
+    const unsubWeb = onSnapshot(webRef, (snapshot) => {
+      const list: PedidoWeb[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as PedidoWeb);
+      });
+      setPedidosWeb(list);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_web'));
+
     return () => {
       unsubProducts();
       unsubMovements();
@@ -225,6 +251,8 @@ export default function App() {
       unsubPedidosEsp();
       unsubListasPrecios();
       unsubPedidosML();
+      unsubCotizaciones();
+      unsubWeb();
     };
   }, []);
 
@@ -789,6 +817,68 @@ export default function App() {
     }
   };
 
+  // Pedidos Cotizaciones Handlers (Mónica / César)
+  const handleAddCotizacion = async (cotizacionData: Omit<CotizacionPedido, 'id'>) => {
+    try {
+      const ref = collection(db, 'pedidos_cotizaciones');
+      await addDoc(ref, cotizacionData);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'pedidos_cotizaciones');
+      throw err;
+    }
+  };
+
+  const handleUpdateCotizacion = async (id: string, updates: Partial<CotizacionPedido>) => {
+    try {
+      const ref = doc(db, 'pedidos_cotizaciones', id);
+      await updateDoc(ref, updates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `pedidos_cotizaciones/${id}`);
+      throw err;
+    }
+  };
+
+  const handleDeleteCotizacion = async (id: string) => {
+    try {
+      const ref = doc(db, 'pedidos_cotizaciones', id);
+      await deleteDoc(ref);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `pedidos_cotizaciones/${id}`);
+      throw err;
+    }
+  };
+
+  // Pedidos Web Handlers
+  const handleAddPedidoWeb = async (webData: Omit<PedidoWeb, 'id'>) => {
+    try {
+      const ref = collection(db, 'pedidos_web');
+      await addDoc(ref, webData);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'pedidos_web');
+      throw err;
+    }
+  };
+
+  const handleUpdatePedidoWeb = async (id: string, updates: Partial<PedidoWeb>) => {
+    try {
+      const ref = doc(db, 'pedidos_web', id);
+      await updateDoc(ref, updates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `pedidos_web/${id}`);
+      throw err;
+    }
+  };
+
+  const handleDeletePedidoWeb = async (id: string) => {
+    try {
+      const ref = doc(db, 'pedidos_web', id);
+      await deleteDoc(ref);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `pedidos_web/${id}`);
+      throw err;
+    }
+  };
+
   // Quick action navigation helpers
   const handleQuickStockIn = (product: Product) => {
     setQuickProductForIn(product);
@@ -824,6 +914,7 @@ export default function App() {
             onOpenInventario={() => setActiveTab('dashboard')}
             onOpenRemision={() => setActiveTab('remisiones')}
             onOpenListasPrecios={() => setActiveTab('listas-precios')}
+            onImportListasPrecios={handleSyncPreciosFromCatalog}
             totalProductsCount={products.length}
           />
         )}
@@ -913,6 +1004,35 @@ export default function App() {
             onAddPedidoML={handleAddPedidoML}
             onToggleCampoML={handleToggleCampoML}
             onDeletePedidoML={handleDeletePedidoML}
+          />
+        )}
+
+        {activeTab === 'pedidos-monica' && (
+          <PedidosCotizacionesView
+            responsable="Mónica"
+            pedidos={pedidosCotizaciones}
+            onAddPedido={handleAddCotizacion}
+            onUpdatePedido={handleUpdateCotizacion}
+            onDeletePedido={handleDeleteCotizacion}
+          />
+        )}
+
+        {activeTab === 'pedidos-cesar' && (
+          <PedidosCotizacionesView
+            responsable="César"
+            pedidos={pedidosCotizaciones}
+            onAddPedido={handleAddCotizacion}
+            onUpdatePedido={handleUpdateCotizacion}
+            onDeletePedido={handleDeleteCotizacion}
+          />
+        )}
+
+        {activeTab === 'pedidos-web' && (
+          <PedidosWebView
+            pedidos={pedidosWeb}
+            onAddPedido={handleAddPedidoWeb}
+            onUpdatePedido={handleUpdatePedidoWeb}
+            onDeletePedido={handleDeletePedidoWeb}
           />
         )}
 

@@ -22,15 +22,18 @@ import {
   ArrowDown,
   RotateCcw,
   Check,
-  Move
+  Move,
+  FileCheck,
+  Globe,
+  User
 } from 'lucide-react';
-import { User } from 'firebase/auth';
+import { User as FirebaseUser } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
 
 interface NavbarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
-  user: User | null;
+  user: FirebaseUser | null;
   userProfile: UserProfile | null;
   onLogin: () => void;
   onLogout: () => void;
@@ -47,6 +50,9 @@ const DEFAULT_TAB_ORDER: ActiveTab[] = [
   'salidas',
   'pedidos-especiales',
   'pedidos-ml',
+  'pedidos-monica',
+  'pedidos-cesar',
+  'pedidos-web',
   'pedidos',
   'reportes-vendedor',
   'listas-precios',
@@ -159,6 +165,27 @@ export const Navbar: React.FC<NavbarProps> = ({
       activeClass: 'bg-yellow-400 text-slate-950 font-black shadow-md shadow-yellow-400/20',
       inactiveClass: 'text-yellow-300 hover:bg-slate-800 hover:text-yellow-200'
     },
+    'pedidos-monica': {
+      id: 'pedidos-monica',
+      label: 'Pedidos Mónica',
+      icon: <FileCheck className="w-3.5 h-3.5" />,
+      activeClass: 'bg-pink-500 text-white font-black shadow-md shadow-pink-500/20',
+      inactiveClass: 'text-pink-300 hover:bg-slate-800 hover:text-pink-200 font-bold'
+    },
+    'pedidos-cesar': {
+      id: 'pedidos-cesar',
+      label: 'Pedidos César',
+      icon: <User className="w-3.5 h-3.5" />,
+      activeClass: 'bg-indigo-500 text-white font-black shadow-md shadow-indigo-500/20',
+      inactiveClass: 'text-indigo-300 hover:bg-slate-800 hover:text-indigo-200 font-bold'
+    },
+    'pedidos-web': {
+      id: 'pedidos-web',
+      label: 'Pedidos Web',
+      icon: <Globe className="w-3.5 h-3.5" />,
+      activeClass: 'bg-blue-500 text-white font-black shadow-md shadow-blue-500/20',
+      inactiveClass: 'text-blue-300 hover:bg-slate-800 hover:text-blue-200 font-bold'
+    },
     'pedidos': {
       id: 'pedidos',
       label: 'Pedidos Material',
@@ -238,6 +265,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (tabId === 'listas-precios' && activeTab === 'listas_precios') return true;
     if (tabId === 'pedidos-especiales' && activeTab === 'pedidos_especiales') return true;
     if (tabId === 'pedidos-ml' && activeTab === 'pedidos_ml') return true;
+    if (tabId === 'pedidos-monica' && activeTab === 'pedidos_monica') return true;
+    if (tabId === 'pedidos-cesar' && activeTab === 'pedidos_cesar') return true;
+    if (tabId === 'pedidos-web' && activeTab === 'pedidos_web') return true;
     if (tabId === 'reportes-vendedor' && activeTab === 'reporte_vendedor') return true;
     return false;
   };

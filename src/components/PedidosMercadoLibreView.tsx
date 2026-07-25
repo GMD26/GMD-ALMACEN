@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ExternalLink, ShoppingCart, Plus, Search, Check, CheckSquare, Square, Trash2, Package, Truck, AlertCircle, FileSpreadsheet, Upload, XCircle, Banner } from 'lucide-react';
+import { ExternalLink, ShoppingCart, Plus, Search, Check, CheckSquare, Square, Trash2, Package, Truck, AlertCircle, FileSpreadsheet, Upload, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PedidoMercadoLibre } from '../types';
 

@@ -24,6 +24,7 @@ interface LowStockOrdersProps {
   userProfile: UserProfile | null;
   onCreatePurchaseOrder: (order: Omit<PurchaseOrder, 'id'>) => Promise<void>;
   onReceivePurchaseOrder: (order: PurchaseOrder) => Promise<void>;
+  onDeletePurchaseOrder?: (id: string) => Promise<void>;
 }
 
 export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
@@ -32,13 +33,16 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
   user,
   userProfile,
   onCreatePurchaseOrder,
-  onReceivePurchaseOrder
+  onReceivePurchaseOrder,
+  onDeletePurchaseOrder
 }) => {
   // Low stock products (minStock > 0 and cantidadActual <= minStock)
   const lowStockProducts = products.filter(p => p.minStock > 0 && p.cantidadActual <= p.minStock);
 
   // Map of SKU to assigned quantity (defaults to 0 for all products)
   const [requestedQuantities, setRequestedQuantities] = useState<{ [sku: string]: number }>({});
+  // Map of SKU to apartado name
+  const [apartadoNames, setApartadoNames] = useState<{ [sku: string]: string }>({});
 
   // Searcher inputs
   const [productSearchQuery, setProductSearchQuery] = useState('');
@@ -118,7 +122,8 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
       minStock: p.minStock,
       cantidadSugerida: Math.max(1, (p.minStock * 2) - p.cantidadActual),
       cantidadPedida: qty,
-      costoEstimado: p.costo || p.precio
+      costoEstimado: p.costo || p.precio,
+      apartadoPor: apartadoNames[p.sku] || ''
     };
   });
 
@@ -354,8 +359,25 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                       </div>
                     </div>
 
-                    {/* Quantity Picker & Total */}
-                    <div className="flex items-center space-x-3 pl-7 sm:pl-0">
+                    {/* Quantity Picker, Apartado Selector & Total */}
+                    <div className="flex flex-wrap items-center gap-3 pl-7 sm:pl-0">
+                      <div>
+                        <label className="block text-[10px] text-slate-600 font-extrabold">Apartado Por</label>
+                        <select
+                          value={apartadoNames[p.sku] || ''}
+                          onChange={(e) => setApartadoNames(prev => ({ ...prev, [p.sku]: e.target.value }))}
+                          className="px-2 py-1 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 bg-white focus:ring-2 focus:ring-red-500 shadow-xs"
+                        >
+                          <option value="">-- Ninguno --</option>
+                          <option value="Manuel">Manuel</option>
+                          <option value="Luis">Luis</option>
+                          <option value="César">César</option>
+                          <option value="Moni">Moni</option>
+                          <option value="Mercado Libre">Mercado Libre</option>
+                          <option value="Mostrador">Mostrador</option>
+                        </select>
+                      </div>
+
                       <div className="text-right">
                         <label className="block text-[10px] text-slate-600 font-extrabold">Cant. Solicitada</label>
                         <input
@@ -531,6 +553,20 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] cursor-pointer disabled:opacity-50"
                         >
                           {receivingOrderId === order.id ? 'Recibiendo...' : 'Marcar Recibido'}
+                        </button>
+                      )}
+
+                      {onDeletePurchaseOrder && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`¿Está seguro de eliminar el pedido ${order.folio}?`)) {
+                              onDeletePurchaseOrder(order.id);
+                            }
+                          }}
+                          title="Eliminar Pedido"
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </td>

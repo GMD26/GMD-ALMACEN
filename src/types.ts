@@ -47,6 +47,7 @@ export interface PurchaseOrderItem {
   cantidadSugerida: number;
   cantidadPedida: number;
   costoEstimado: number;
+  apartadoPor?: string;
 }
 
 export interface PurchaseOrder {
@@ -116,7 +117,7 @@ export interface Remision {
   createdAt: string;
 }
 
-export type VendedorNombre = 'Manuel' | 'Luis' | 'César' | 'Mercado Libre' | 'Mostrador';
+export type VendedorNombre = 'Manuel' | 'Luis' | 'César' | 'Moni' | 'Mercado Libre' | 'Mostrador';
 
 export interface Apartado {
   id: string;
@@ -168,6 +169,43 @@ export interface PedidoMercadoLibre {
   createdAt: string;
 }
 
+export type ResponsablePedido = 'Mónica' | 'César';
+
+export interface CotizacionPedido {
+  id: string;
+  responsable: ResponsablePedido;
+  folioCotizacion: string;
+  cliente: string;
+  resumen: string;
+  total: number;
+  pagado: boolean;
+  pendientePorPedir: boolean;
+  guiaGenerada: boolean;
+  guiaPdfUrl?: string;
+  guiaNombreArchivo?: string;
+  pedidoCompletado: boolean;
+  cotizacionPdfUrl?: string;
+  cotizacionNombreArchivo?: string;
+  fecha: string;
+  notas?: string;
+  createdAt: string;
+}
+
+export interface PedidoWeb {
+  id: string;
+  numPedido: string;
+  fechaPedido: string;
+  sku: string;
+  cantidad: number;
+  direccionEnvio: string;
+  recibido: boolean;
+  pedidoKronaline: boolean;
+  guiaGenerada: boolean;
+  completado: boolean;
+  notas?: string;
+  createdAt: string;
+}
+
 export type ActiveTab = 
   | 'portada' 
   | 'dashboard' 
@@ -182,6 +220,12 @@ export type ActiveTab =
   | 'pedidos_especiales'
   | 'pedidos-ml'
   | 'pedidos_ml'
+  | 'pedidos-monica'
+  | 'pedidos_monica'
+  | 'pedidos-cesar'
+  | 'pedidos_cesar'
+  | 'pedidos-web'
+  | 'pedidos_web'
   | 'pedidos' 
   | 'reportes' 
   | 'reportes-vendedor'
