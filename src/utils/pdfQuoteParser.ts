@@ -78,9 +78,13 @@ export function parseQuoteText(fullText: string, lines: string[]): ExtractedQuot
 
   // --- 1. FOLIO / SERIE EXTRACTION ---
   const folioRegexes = [
-    /(?:Serie[\/\s]*Folio|Serie\s+A?\s*Folio|Folio|Cotización\s*N[°o]?|COT|Cotizacion|No\.\s*Cotización)[\s\:\#]*([A-Z0-9\-\/]{3,20})/i,
-    /(COT\-[0-9]{3,10})/i,
-    /(GMD\-[0-9]{3,10})/i,
+    // Matches "Serie / Folio C-Ecomerce-432", "Serie/Folio C-Ecomerce-432", etc.
+    /(?:Serie\s*[\/\-]\s*Folio|Serie\s+Folio|Serie\s+A?\s*Folio)[\s\:\#]*([A-Za-z0-9\-\/]{3,35})/i,
+    // Matches explicit Cotización codes like C-Ecomerce-432, C-Moni-123, C-Cesar-123
+    /((?:C\-Ecomerce|C\-Moni|C\-Cesar|COT|GMD)\-[A-Za-z0-9\-]+)/i,
+    // Matches "Cotización ... Folio C-Ecomerce-432"
+    /(?:Cotización|Cotizacion)[\s\S]{0,100}?(?:Serie\s*[\/\-]\s*Folio|Folio|Serie)[\s\:\#]*([A-Za-z0-9\-\/]{3,35})/i,
+    /(?:Folio|Cotización\s*N[°o]?|No\.\s*Cotización)[\s\:\#]*([A-Za-z0-9\-\/]{3,25})/i,
     /Folio\s*:\s*([^\s\n]+)/i
   ];
 
@@ -98,25 +102,30 @@ export function parseQuoteText(fullText: string, lines: string[]): ExtractedQuot
 
   // --- 2. CLIENTE EXTRACTION ---
   const clienteRegexes = [
-    /(?:Cliente|At'n|Atención|Contacto|Razón\s*Social|Señor\(es\)|Empresa)[\s\:\#]*([^\n\r]{3,60})/i,
-    /DATOS DEL CLIENTE[\s\:\#\n]*([^\n\r]{3,60})/i
+    // Prioritize "Para:" field (e.g. "Para: Cliente Ejemplo S.A.")
+    /(?:^|\n|\r|\s)(?:Para|PARA)[\s\:\#]+([^\n\r]{2,70})/i,
+    /(?:Cliente|At'n|Atención|Contacto|Razón\s*Social|Señor\(es\)|Empresa)[\s\:\#]*([^\n\r]{3,70})/i,
+    /DATOS DEL CLIENTE[\s\:\#\n]*([^\n\r]{3,70})/i
   ];
 
   for (const regex of clienteRegexes) {
     const match = fullText.match(regex);
     if (match && match[1] && match[1].trim().length > 2) {
       cliente = match[1].trim();
-      // Cleanup unwanted trailing prefixes
-      cliente = cliente.split(/(?:RFC|Fecha|Dirección|Tel|Email|Condiciones)/i)[0].trim();
-      break;
+      // Cleanup unwanted trailing prefixes or next field labels
+      cliente = cliente.split(/(?:RFC|Fecha|Dirección|Tel|Email|Condiciones|At'n|Atención|Página|Pagina)/i)[0].trim();
+      if (cliente.length > 2) break;
     }
   }
 
   if (!cliente) {
-    // Search line by line for Client hints
-    const clientLine = lines.find(l => l.toUpperCase().includes('CLIENTE:') || l.toUpperCase().includes("AT'N:"));
+    // Search line by line for Para / Client hints
+    const clientLine = lines.find(l => 
+      /^(?:PARA|CLIENTE|AT'N|ATENCIÓN|CONTACTO)\s*:\s*/i.test(l.trim())
+    );
     if (clientLine) {
-      cliente = clientLine.replace(/^(?:CLIENTE|AT'N|ATENCIÓN|CONTACTO)\s*:\s*/i, '').trim();
+      cliente = clientLine.replace(/^(?:PARA|CLIENTE|AT'N|ATENCIÓN|CONTACTO)\s*:\s*/i, '').trim();
+      cliente = cliente.split(/(?:RFC|Fecha|Dirección|Tel|Email|Condiciones)/i)[0].trim();
     }
   }
 

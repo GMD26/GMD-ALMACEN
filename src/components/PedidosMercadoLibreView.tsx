@@ -8,6 +8,7 @@ interface PedidosMercadoLibreViewProps {
   onAddPedidoML: (pedido: Omit<PedidoMercadoLibre, 'id' | 'createdAt'>) => Promise<void>;
   onToggleCampoML: (id: string, field: 'pedidoAKronaline' | 'entregado' | 'cancelado' | 'facturado', value: boolean) => Promise<void>;
   onDeletePedidoML: (id: string) => Promise<void>;
+  onDescontarAlmacenGMD?: (pedido: PedidoMercadoLibre, revertir?: boolean) => Promise<void>;
 }
 
 export const MERCADO_LIBRE_OMNI_URL = 'https://www.mercadolibre.com.mx/ventas/omni/listado?filters=TAB_NEXT_DAYS&subFilters=&search=&limit=50&offset=0&startPeriod=';
@@ -16,7 +17,8 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
   pedidosML,
   onAddPedidoML,
   onToggleCampoML,
-  onDeletePedidoML
+  onDeletePedidoML,
+  onDescontarAlmacenGMD
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'CANCELLED' | 'DELIVERED'>('ALL');
@@ -293,6 +295,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
                 <th className="py-3 px-4">Cliente ML</th>
                 <th className="py-3 px-4">SKU / Producto Requerido</th>
                 <th className="py-3 px-4 text-center">Cant.</th>
+                <th className="py-3 px-4 text-center bg-cyan-950 text-cyan-300">Salida Almacén GMD</th>
                 <th className="py-3 px-4 text-center bg-amber-950 text-amber-300">Pedido a Kronaline</th>
                 <th className="py-3 px-4 text-center bg-emerald-950 text-emerald-300">Entregado</th>
                 <th className="py-3 px-4 text-center bg-purple-950 text-purple-300">Facturado</th>
@@ -344,6 +347,39 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
 
                     <td className="py-3 px-4 text-center font-extrabold text-slate-900 text-sm">
                       {p.cantidad}
+                    </td>
+
+                    {/* Salida Almacén GMD (Descuento Automático de Inventario) */}
+                    <td className="py-3 px-4 text-center bg-cyan-50/60">
+                      <button
+                        onClick={() => {
+                          if (!onDescontarAlmacenGMD) return;
+                          if (p.salidaAlmacenGMD) {
+                            if (confirm(`¿Revertir la salida de almacén para el pedido ${p.numPedidoML}? Se restaurará la cantidad (${p.cantidad}) al inventario.`)) {
+                              onDescontarAlmacenGMD(p, true);
+                            }
+                          } else {
+                            onDescontarAlmacenGMD(p, false);
+                          }
+                        }}
+                        disabled={p.cancelado}
+                        className={`inline-flex flex-col items-center justify-center space-y-0.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 ${
+                          p.salidaAlmacenGMD
+                            ? 'bg-cyan-700 text-white shadow-sm ring-2 ring-cyan-500 hover:bg-cyan-600'
+                            : 'bg-white border border-cyan-300 text-cyan-800 hover:bg-cyan-100 hover:border-cyan-400'
+                        }`}
+                        title={p.salidaAlmacenGMD ? "Salida registrada de Almacén GMD. Clic para revertir." : "Hacer clic al salir el material físicamente del almacén GMD para descontar automáticamente del inventario."}
+                      >
+                        <div className="flex items-center space-x-1">
+                          {p.salidaAlmacenGMD ? <CheckSquare className="w-4 h-4 text-cyan-200" /> : <Package className="w-4 h-4 text-cyan-600" />}
+                          <span>{p.salidaAlmacenGMD ? 'Salida GMD OK' : 'Salida Almacén GMD'}</span>
+                        </div>
+                        {p.fechaSalidaAlmacenGMD && (
+                          <span className="text-[9px] font-medium text-cyan-100 opacity-90">
+                            {new Date(p.fechaSalidaAlmacenGMD).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </button>
                     </td>
 
                     {/* Pedido a Kronaline Checkbox Column */}

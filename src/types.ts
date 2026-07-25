@@ -165,6 +165,8 @@ export interface PedidoMercadoLibre {
   entregado: boolean;
   cancelado?: boolean;
   facturado?: boolean;
+  salidaAlmacenGMD?: boolean;
+  fechaSalidaAlmacenGMD?: string;
   fecha: string;
   notas?: string;
   createdAt: string;

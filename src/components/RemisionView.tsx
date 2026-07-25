@@ -435,7 +435,7 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
             className="p-1.5 font-black border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-2 focus:ring-cyan-500 cursor-pointer"
           >
             <option value="Manuel Moreno">Manuel Moreno</option>
-            <option value="Luis Blanco">Luis Blanco</option>
+            <option value="Luis BlanNo">Luis BlanNo</option>
             <option value="Cesar Garcia">Cesar Garcia</option>
             <option value="Mostrador">Mostrador</option>
           </select>

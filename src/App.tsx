@@ -850,6 +850,65 @@ export default function App() {
     }
   };
 
+  const handleDescontarAlmacenGMD_ML = async (pedidoML: PedidoMercadoLibre, revertir: boolean = false) => {
+    try {
+      const now = new Date();
+      const batch = writeBatch(db);
+
+      // Find matching product in catalog by SKU or description
+      const matchedProd = products.find(p => p.sku && pedidoML.sku && p.sku.trim().toUpperCase() === pedidoML.sku.trim().toUpperCase()) ||
+        products.find(p => p.sku && pedidoML.sku && p.sku.trim().toUpperCase().includes(pedidoML.sku.trim().toUpperCase())) ||
+        products.find(p => p.descripcion && pedidoML.descripcionProducto && p.descripcion.trim().toUpperCase().includes(pedidoML.descripcionProducto.trim().toUpperCase()));
+
+      if (matchedProd) {
+        const currentStock = matchedProd.cantidadActual || 0;
+        const newStock = revertir 
+          ? currentStock + pedidoML.cantidad 
+          : Math.max(0, currentStock - pedidoML.cantidad);
+
+        const prodRef = doc(db, 'products', matchedProd.id);
+        batch.update(prodRef, {
+          cantidadActual: newStock,
+          updatedAt: now.toISOString()
+        });
+
+        // Record automatic inventory movement
+        const movRef = doc(collection(db, 'inventory_movements'));
+        batch.set(movRef, {
+          productId: matchedProd.id,
+          sku: matchedProd.sku,
+          descripcion: matchedProd.descripcion,
+          tipo: revertir ? 'ENTRADA' : 'SALIDA',
+          cantidad: pedidoML.cantidad,
+          stockAnterior: currentStock,
+          stockNuevo: newStock,
+          referencia: `Salida Almacén GMD - Pedido ML #${pedidoML.numPedidoML} (${pedidoML.clienteML})`,
+          ubicacion: matchedProd.ubicacionAlmacen || 'ALMACEN GMD',
+          usuarioEmail: userProfile?.email || 'Mas.Digital1@gmail.com',
+          usuarioNombre: userProfile?.displayName || 'Grupo Más Digital',
+          costoOPrecioUnitario: matchedProd.precio || 0,
+          notas: revertir 
+            ? `Reversión de Salida Almacén GMD para Pedido Mercado Libre #${pedidoML.numPedidoML}`
+            : `Descuento automático por Salida de Almacén GMD - Pedido Mercado Libre #${pedidoML.numPedidoML}`,
+          fecha: now.toISOString().split('T')[0],
+          timestamp: now.getTime()
+        });
+      }
+
+      // Update Mercado Libre Order
+      const mlRef = doc(db, 'pedidos_ml', pedidoML.id);
+      batch.update(mlRef, {
+        salidaAlmacenGMD: !revertir,
+        fechaSalidaAlmacenGMD: revertir ? null : now.toISOString()
+      });
+
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `pedidos_ml/${pedidoML.id}`);
+      throw err;
+    }
+  };
+
   // Pedidos Cotizaciones Handlers (Mónica / César)
   const handleAddCotizacion = async (cotizacionData: Omit<CotizacionPedido, 'id'>) => {
     try {
@@ -1041,6 +1100,7 @@ export default function App() {
             onAddPedidoML={handleAddPedidoML}
             onToggleCampoML={handleToggleCampoML}
             onDeletePedidoML={handleDeletePedidoML}
+            onDescontarAlmacenGMD={handleDescontarAlmacenGMD_ML}
           />
         )}
 

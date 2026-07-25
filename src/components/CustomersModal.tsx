@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Users, 
   Plus, 
@@ -10,8 +10,16 @@ import {
   Phone, 
   Mail, 
   MapPin, 
-  UserCheck 
+  UserCheck,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  Clipboard,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 import { Customer } from '../types';
 
 interface CustomersModalProps {
@@ -33,6 +41,8 @@ export const CustomersModal: React.FC<CustomersModalProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importTab, setImportTab] = useState<'upload' | 'paste'>('upload');
   
   // New Customer Form State
   const [razonSocial, setRazonSocial] = useState('');
@@ -43,6 +53,14 @@ export const CustomersModal: React.FC<CustomersModalProps> = ({
   const [contactoNombre, setContactoNombre] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Bulk Import State
+  const [rawText, setRawText] = useState('');
+  const [parsedCustomers, setParsedCustomers] = useState<Omit<Customer, 'id'>[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importFileName, setImportFileName] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
 
   const filteredCustomers = customers.filter(c => 
@@ -51,6 +69,151 @@ export const CustomersModal: React.FC<CustomersModalProps> = ({
     c.telefono.includes(searchTerm) ||
     (c.rfcOrId && c.rfcOrId.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const normalizeRowToCustomer = (row: Record<string, any>, idx: number): Omit<Customer, 'id'> | null => {
+    const keys = Object.keys(row);
+    const findValue = (possibleNames: string[]) => {
+      const match = keys.find(k => possibleNames.includes(k.trim().toUpperCase()));
+      return match ? String(row[match]).trim() : '';
+    };
+
+    const razon = findValue([
+      'RAZON SOCIAL', 'RAZÓN SOCIAL', 'NOMBRE', 'CLIENTE', 'EMPRESA', 'RECEPTOR', 'RAZONSOCIAL', 'NOMBRE_CLIENTE'
+    ]) || (row[0] ? String(row[0]).trim() : '');
+
+    if (!razon) return null;
+
+    const rfc = findValue(['RFC', 'ID', 'TAX ID', 'RFC/ID', 'RFC_ID', 'IDENTIFICACION']) || (row[1] ? String(row[1]).trim() : '');
+    const domicilio = findValue([
+      'DOMICILIO', 'DOMICILIO DE ENTREGA', 'DOMICILIO_ENTREGA', 'DIRECCION', 'DIRECCIÓN', 'CALLE', 'DIRECCION_ENTREGA'
+    ]) || (row[2] ? String(row[2]).trim() : 'Ciudad de México / Puebla');
+
+    const tel = findValue(['TELEFONO', 'TELÉFONO', 'TEL', 'CEL', 'CELULAR', 'WHATSAPP']) || (row[3] ? String(row[3]).trim() : '');
+    const mail = findValue(['EMAIL', 'CORREO', 'CORREO ELECTRÓNICO', 'E-MAIL', 'MAIL']) || (row[4] ? String(row[4]).trim() : '');
+    const contacto = findValue(['CONTACTO', 'ATENCION', 'ATENCIÓN', 'AT\'N', 'NOMBRE CONTACTO', 'ATENCION_A']) || (row[5] ? String(row[5]).trim() : '');
+
+    return {
+      razonSocial: razon,
+      rfcOrId: rfc,
+      domicilioEntrega: domicilio,
+      telefono: tel,
+      email: mail,
+      contactoNombre: contacto,
+      createdAt: new Date().toISOString()
+    };
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    setIsImporting(true);
+    setImportErrors([]);
+
+    try {
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        const list: Omit<Customer, 'id'>[] = [];
+        const errs: string[] = [];
+
+        json.forEach((row, idx) => {
+          const c = normalizeRowToCustomer(row, idx);
+          if (c) list.push(c);
+          else errs.push(`Fila ${idx + 2}: Nombre/Razón Social omitido.`);
+        });
+
+        setParsedCustomers(list);
+        setImportErrors(errs);
+      } else {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const list: Omit<Customer, 'id'>[] = [];
+            const errs: string[] = [];
+            results.data.forEach((row: any, idx: number) => {
+              const c = normalizeRowToCustomer(row, idx);
+              if (c) list.push(c);
+              else errs.push(`Fila ${idx + 2}: Registro incompleto.`);
+            });
+            setParsedCustomers(list);
+            setImportErrors(errs);
+          },
+          error: (err) => {
+            setImportErrors([`Error al leer archivo CSV: ${err.message}`]);
+          }
+        });
+      }
+    } catch (err: any) {
+      setImportErrors([`Error al procesar archivo: ${err.message || String(err)}`]);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleProcessPastedText = () => {
+    if (!rawText.trim()) return;
+    setIsImporting(true);
+    setImportErrors([]);
+
+    Papa.parse(rawText.trim(), {
+      header: true,
+      delimiter: '',
+      skipEmptyLines: true,
+      complete: (results) => {
+        setIsImporting(false);
+        const list: Omit<Customer, 'id'>[] = [];
+        const errs: string[] = [];
+        results.data.forEach((row: any, idx: number) => {
+          const c = normalizeRowToCustomer(row, idx);
+          if (c) list.push(c);
+          else errs.push(`Línea ${idx + 1}: Fila omitida.`);
+        });
+        setParsedCustomers(list);
+        setImportErrors(errs);
+      }
+    });
+  };
+
+  const handleDownloadTemplate = () => {
+    const csv = [
+      'RAZON SOCIAL,RFC,DOMICILIO DE ENTREGA,TELEFONO,EMAIL,CONTACTO',
+      'COMERCIALIZADORA IMPRESIONES S.A. DE C.V.,CIM980212ABC,"Av. Reforma 1230, Col. Centro, Puebla, C.P. 72000",2221234567,contacto@impresiones.com,Ing. Roberto Gómez',
+      'DISTRIBUIDORA GRAFICA DIGITAL,DGD051011XYZ,"Calle 5 de Mayo 402, Industrial, Cholula",2229876543,ventas@graficadigital.mx,Lic. Mariana Torres'
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Plantilla_Clientes_GrupoMasDigital.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleExecuteBulkImport = async () => {
+    if (parsedCustomers.length === 0) return;
+    setIsImporting(true);
+    try {
+      for (const cust of parsedCustomers) {
+        await onAddCustomer(cust);
+      }
+      alert(`¡Se importaron ${parsedCustomers.length} clientes exitosamente!`);
+      setParsedCustomers([]);
+      setIsImportOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      alert('Ocurrió un error al guardar algunos clientes: ' + (err.message || String(err)));
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const handleSubmitNewCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +252,7 @@ export const CustomersModal: React.FC<CustomersModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="bg-slate-900 text-white p-5 flex items-center justify-between border-b border-slate-800">
@@ -99,7 +262,7 @@ export const CustomersModal: React.FC<CustomersModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-extrabold text-white">Catálogo de Clientes</h3>
-              <p className="text-xs text-slate-400">Administra los datos de los receptores para Notas de Remisión.</p>
+              <p className="text-xs text-slate-400">Administra los datos de los receptores e importa masivamente desde Excel.</p>
             </div>
           </div>
 
@@ -127,21 +290,192 @@ export const CustomersModal: React.FC<CustomersModalProps> = ({
               />
             </div>
 
-            <button
-              onClick={() => setIsFormOpen(!isFormOpen)}
-              className="flex items-center justify-center space-x-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{isFormOpen ? 'Ocultar Formulario' : 'Dar de Alta Cliente'}</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setIsImportOpen(!isImportOpen);
+                  if (isFormOpen) setIsFormOpen(false);
+                }}
+                className="flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>{isImportOpen ? 'Cerrar Importador' : 'Importar Excel / CSV'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsFormOpen(!isFormOpen);
+                  if (isImportOpen) setIsImportOpen(false);
+                }}
+                className="flex items-center justify-center space-x-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isFormOpen ? 'Ocultar Formulario' : 'Alta de Cliente'}</span>
+              </button>
+            </div>
           </div>
+
+          {/* BULK EXCEL / CSV IMPORT SECTION */}
+          {isImportOpen && (
+            <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 space-y-4 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-emerald-200">
+                <div className="flex items-center space-x-2">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-700" />
+                  <h4 className="font-extrabold text-sm text-emerald-950">
+                    Importación Masiva de Clientes desde Excel
+                  </h4>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center space-x-1 text-xs font-bold text-emerald-800 bg-white border border-emerald-300 hover:bg-emerald-100 px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Descargar Plantilla CSV</span>
+                </button>
+              </div>
+
+              {/* Tab Selector */}
+              <div className="inline-flex rounded-lg bg-emerald-100 p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setImportTab('upload')}
+                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                    importTab === 'upload' ? 'bg-white text-emerald-950 shadow font-bold' : 'text-emerald-800'
+                  }`}
+                >
+                  Subir Archivo (.xlsx / .csv)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportTab('paste')}
+                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                    importTab === 'paste' ? 'bg-white text-emerald-950 shadow font-bold' : 'text-emerald-800'
+                  }`}
+                >
+                  Copiar y Pegar desde Excel
+                </button>
+              </div>
+
+              {/* File Upload Tab */}
+              {importTab === 'upload' && (
+                <div className="space-y-3">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept=".xlsx, .xls, .csv, .tsv, .txt"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white rounded-xl p-6 text-center cursor-pointer hover:bg-emerald-50/50 transition-all"
+                  >
+                    <Upload className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+                    <span className="font-bold text-xs text-slate-800 block">
+                      Selecciona o arrastra tu archivo Excel / CSV aquí
+                    </span>
+                    <span className="text-[11px] text-slate-500 mt-1 block">
+                      Columnas detectadas automáticamente: Razón Social, RFC, Domicilio, Teléfono, Correo, Contacto
+                    </span>
+                  </div>
+
+                  {importFileName && (
+                    <div className="flex items-center space-x-2 text-xs text-emerald-800 bg-white p-2.5 rounded-lg border border-emerald-200">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Archivo seleccionado: <strong>{importFileName}</strong></span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Paste Tab */}
+              {importTab === 'paste' && (
+                <div className="space-y-2">
+                  <textarea
+                    rows={4}
+                    value={rawText}
+                    onChange={(e) => setRawText(e.target.value)}
+                    placeholder="Copiar celdas de Excel y pegar aquí (ej. RAZON SOCIAL	RFC	DOMICILIO	TELEFONO...)"
+                    className="w-full p-2.5 text-xs font-mono border border-emerald-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleProcessPastedText}
+                    disabled={!rawText.trim() || isImporting}
+                    className="bg-emerald-800 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer disabled:opacity-50"
+                  >
+                    Procesar Texto
+                  </button>
+                </div>
+              )}
+
+              {/* Parsed Preview Table */}
+              {parsedCustomers.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-emerald-200 text-xs">
+                    <span className="font-extrabold text-emerald-950">
+                      {parsedCustomers.length} Clientes listos para guardar en catálogo
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleExecuteBulkImport}
+                      disabled={isImporting}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-4 py-2 rounded-xl shadow cursor-pointer disabled:opacity-50"
+                    >
+                      {isImporting ? 'Importando...' : `Confirmar e Importar (${parsedCustomers.length})`}
+                    </button>
+                  </div>
+
+                  <div className="border border-emerald-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-emerald-100 text-emerald-900 font-bold sticky top-0">
+                        <tr>
+                          <th className="p-2">#</th>
+                          <th className="p-2">Razón Social / Nombre</th>
+                          <th className="p-2">RFC / ID</th>
+                          <th className="p-2">Domicilio de Entrega</th>
+                          <th className="p-2">Teléfono</th>
+                          <th className="p-2">Correo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-50">
+                        {parsedCustomers.slice(0, 30).map((c, idx) => (
+                          <tr key={idx} className="hover:bg-emerald-50/50">
+                            <td className="p-2 text-slate-400">{idx + 1}</td>
+                            <td className="p-2 font-bold text-slate-900">{c.razonSocial}</td>
+                            <td className="p-2 text-slate-600">{c.rfcOrId || '—'}</td>
+                            <td className="p-2 text-slate-600 truncate max-w-xs">{c.domicilioEntrega}</td>
+                            <td className="p-2 text-slate-600">{c.telefono || '—'}</td>
+                            <td className="p-2 text-slate-600">{c.email || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {importErrors.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-900">
+                  <span className="font-bold block mb-1">Alertas durante lectura:</span>
+                  <ul className="list-disc list-inside space-y-0.5 max-h-20 overflow-y-auto">
+                    {importErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* New Customer Form */}
           {isFormOpen && (
             <form onSubmit={handleSubmitNewCustomer} className="bg-cyan-50/50 border border-cyan-200 rounded-2xl p-5 space-y-4">
               <h4 className="font-extrabold text-sm text-cyan-950 flex items-center space-x-2 border-b border-cyan-200/80 pb-2">
                 <UserCheck className="w-4 h-4 text-cyan-600" />
-                <span>Registro de Nuevo Cliente</span>
+                <span>Registro Individual de Nuevo Cliente</span>
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
