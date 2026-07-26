@@ -20,10 +20,13 @@ import {
   SlidersHorizontal,
   Check,
   Eye,
-  EyeOff
+  EyeOff,
+  Globe,
+  Mail
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PrecioListaItem } from '../types';
+import { GMDLogo } from './GMDHeaderLogo';
 
 interface PortadaProps {
   onOpenInventario: () => void;
@@ -164,23 +167,39 @@ export const Portada: React.FC<PortadaProps> = ({
           {/* Logo & Company Identity */}
           <div className="flex flex-col items-center md:items-start text-center md:text-left space-y-4 max-w-2xl">
             <div>
-              <div className="inline-flex items-center space-x-2 bg-slate-800/90 border border-slate-700/80 px-3 py-1 rounded-full text-[11px] font-semibold text-cyan-400 mb-2">
+              <div className="inline-flex items-center space-x-2 bg-slate-800/90 border border-slate-700/80 px-3 py-1 rounded-full text-[11px] font-semibold text-cyan-400 mb-3">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                 <span>Matriz Puebla • Grupo Más Digital</span>
               </div>
-              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
-                GRUPO MÁS DIGITAL
-              </h1>
+              
+              {/* CMYK Logo GRUPO + DIGITAL */}
+              <GMDLogo variant="dark" size="lg" showSubtitle={true} />
             </div>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               Selecciona la herramienta que deseas operar hoy. Gestiona el catálogo de inventario con más de {totalProductsCount || '613'} SKUs en la hoja <strong className="text-white">Inventario GMD 26</strong> o emite notas de remisión profesionales.
             </p>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-xs text-slate-400 pt-1 border-t border-slate-800/80 w-full">
-              <span className="flex items-center space-x-1 font-semibold text-slate-300">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80 w-full font-semibold">
+              <span className="flex items-center space-x-1">
                 <MapPin className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Ave. Ignacio Zaragoza 2-1, Col. Héroes De Puebla, C.P. 72520, Puebla, Pue.</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Phone className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Tel: 222 2133239</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                <span>WhatsApp: +52 1 221 261 5111</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span>grupomasdigital.com</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Mail className="w-3.5 h-3.5 text-fuchsia-400" />
+                <span>ventas@grupomasdigital.com</span>
               </span>
             </div>
           </div>

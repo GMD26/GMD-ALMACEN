@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
+import { GMDLogo } from './GMDHeaderLogo';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -278,18 +279,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           
           {/* Logo & Brand - Click goes to Portada */}
-          <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setActiveTab('portada')}>
+          <div className="flex items-center space-x-3 cursor-pointer group py-1" onClick={() => setActiveTab('portada')}>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent group-hover:to-cyan-200">
-                  GRUPO MÁS DIGITAL
-                </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hidden sm:inline-block">
-                  SISTEMA DUAL
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Control de Inventario GMD 26 y Notas de Remisión</p>
+              <GMDLogo variant="dark" size="sm" showSubtitle={false} />
+              <p className="text-[10px] font-medium text-slate-400 hidden sm:block mt-0.5">Control de Inventario GMD 26 & Remisiones</p>
             </div>
+            <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hidden lg:inline-block">
+              ERP GMD 26
+            </span>
           </div>
 
           {/* User Auth Info & Tab Reorder Button */}

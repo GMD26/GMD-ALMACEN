@@ -28,6 +28,7 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { Product, Customer, Remision, RemisionItem, UserProfile } from '../types';
+import { GMDLogo } from './GMDHeaderLogo';
 import { CustomersModal } from './CustomersModal';
 import { CatalogPickerModal } from './CatalogPickerModal';
 import { extractPeso, getPrecioConIva } from '../data/initialCatalog';
@@ -478,37 +479,39 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
           
           {/* Vendedor Info */}
           <div className="flex items-start max-w-xl">
-            <div className="space-y-1.5">
-              <h1 className="font-black text-2xl text-slate-900 tracking-tight leading-none">
-                {razonSocialVendedor}
-              </h1>
+            <div className="space-y-2">
+              <GMDLogo variant="light" size="lg" showSubtitle={false} />
+              
               <p className="text-xs text-slate-600 font-medium leading-relaxed">
                 {direccionVendedor}
               </p>
 
-              <div className="text-xs pt-2 space-y-1 border-t border-slate-100">
-                <div className="flex items-center space-x-1.5 text-slate-900 font-extrabold">
+              <div className="text-xs pt-1.5 space-y-1 border-t border-slate-100">
+                <div className="flex items-center space-x-2 text-slate-900 font-extrabold">
                   <span className="text-slate-500 font-bold">Vendedor:</span>
-                  <span className="bg-cyan-100 text-cyan-950 px-2 py-0.5 rounded text-xs font-black border border-cyan-200">
+                  <span className="bg-cyan-100 text-cyan-950 px-2.5 py-0.5 rounded text-xs font-black border border-cyan-300">
                     {vendedorNombre}
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700 font-bold pt-0.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-800 font-bold pt-0.5">
                   {telefonoVendedor && (
                     <span className="inline-flex items-center space-x-1">
                       <Phone className="w-3.5 h-3.5 text-cyan-600" />
-                      <span>Tel: {telefonoVendedor}</span>
+                      <span>Tel / WA: {telefonoVendedor}</span>
                     </span>
                   )}
-                  {whatsappVendedor && (
+                  {whatsappVendedor && whatsappVendedor !== telefonoVendedor && (
                     <span className="inline-flex items-center space-x-1 text-emerald-700">
                       <Phone className="w-3.5 h-3.5 text-emerald-600" />
                       <span>WhatsApp: {whatsappVendedor}</span>
                     </span>
                   )}
+                  <span className="text-slate-600 font-bold">
+                    • Web: www.grupomasdigital.com
+                  </span>
                   {emailVendedor && (
-                    <span className="text-slate-500 font-normal">
+                    <span className="text-slate-600 font-medium">
                       • {emailVendedor}
                     </span>
                   )}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Tag, Plus, Search, Filter, Edit2, Trash2, Check, RefreshCw, Upload, FileText, DollarSign } from 'lucide-react';
 import { PrecioListaItem, Product } from '../types';
+import { GMDLogo } from './GMDHeaderLogo';
 
 interface ListasPreciosViewProps {
   listasPrecios: PrecioListaItem[];
@@ -30,6 +31,18 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
   const [descripcion, setDescripcion] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Price formatting helper rule:
+  // 1. Math.ceil rounding up to whole integer
+  // 2. Thousands comma separator
+  // 3. Always ends with .00
+  const formatPrecioLista = (val: number): string => {
+    const ceiled = Math.ceil(val || 0);
+    return ceiled.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
 
   // Categories list - Restricted strictly to the 7 price categories
   const categoriesList = [
@@ -78,7 +91,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
         if (categoryFilter.toLowerCase() === 'costo' && p.costo) {
           pVal = p.costo;
         } else {
-          pVal = Math.round(pVal * factor * 100) / 100;
+          pVal = Math.ceil(pVal * factor);
         }
         return {
           id: `derived-${p.id}-${categoryFilter}`,
@@ -150,14 +163,15 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
     <div className="space-y-6">
       {/* Header Banner */}
       <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-4">
           <div className="p-3 bg-cyan-500/20 text-cyan-400 rounded-xl border border-cyan-500/30">
             <Tag className="w-6 h-6" />
           </div>
-          <div>
+          <div className="space-y-1">
+            <GMDLogo variant="dark" size="sm" showSubtitle={false} />
             <h1 className="text-xl font-extrabold text-white">Listas de Precios de Materiales</h1>
             <p className="text-slate-300 text-xs mt-0.5">
-              Consulta y actualización rápida de precios vigentes organizados por categoría sin afectar el diseño.
+              Precios redondeados al número entero superior sin decimales fraccionarios, con separador de miles y terminación .00.
             </p>
           </div>
         </div>
@@ -240,7 +254,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
                     </td>
 
                     <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">
-                      ${item.precio.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${formatPrecioLista(item.precio)}
                     </td>
 
                     <td className="py-3 px-4 text-slate-700">
