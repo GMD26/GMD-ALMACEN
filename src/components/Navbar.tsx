@@ -25,7 +25,8 @@ import {
   Move,
   FileCheck,
   Globe,
-  User
+  User,
+  Layers
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
@@ -100,6 +101,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   
   // Modal for mobile / explicit reordering
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [showSaveToast, setShowSaveToast] = useState(false);
+
+  // Helper to persist tab order explicitly
+  const saveTabsOrderToLocalStorage = (newOrder: ActiveTab[]) => {
+    try {
+      localStorage.setItem('gmd_custom_tab_order_v1', JSON.stringify(newOrder));
+    } catch (err) {
+      console.error('Error al guardar el orden de pestañas:', err);
+    }
+  };
 
   // Tab Definitions Dictionary
   const tabDefs: Record<string, TabDefinition> = {
@@ -344,8 +355,43 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Dynamic & Draggable Navigation Tabs Bar */}
-        <nav className="flex space-x-1 overflow-x-auto py-2 scrollbar-none border-t border-slate-800/80 items-center">
+        {/* Mobile Tab Dropdown Selector (Feature 19a) */}
+        <div className="sm:hidden py-2 px-1 border-t border-slate-800 flex items-center justify-between gap-2">
+          <div className="flex-1 flex items-center space-x-1.5 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5">
+            <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
+            <select
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value as ActiveTab)}
+              className="w-full bg-transparent text-xs font-bold text-slate-100 focus:outline-none cursor-pointer"
+            >
+              {tabsOrder.map((tabId) => {
+                const def = tabDefs[tabId];
+                if (!def) return null;
+                return (
+                  <option key={tabId} value={tabId} className="bg-slate-900 text-white">
+                    {def.label}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <button
+            onClick={() => {
+              saveTabsOrderToLocalStorage(tabsOrder);
+              setShowSaveToast(true);
+              setTimeout(() => setShowSaveToast(false), 3000);
+            }}
+            className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] px-2.5 py-2 rounded-xl shadow cursor-pointer shrink-0"
+            title="Fijar y guardar orden de pestañas para futuras sesiones"
+          >
+            <Check className="w-3.5 h-3.5" />
+            <span>Fijar Pestañas</span>
+          </button>
+        </div>
+
+        {/* Dynamic & Draggable Navigation Tabs Bar (Supports multi-row on mobile) */}
+        <nav className="flex flex-wrap sm:flex-nowrap gap-1 overflow-x-auto py-2 scrollbar-none border-t border-slate-800/80 items-center">
           {tabsOrder.map((tabId, idx) => {
             const def = tabDefs[tabId];
             if (!def) return null;
@@ -388,6 +434,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
       </div>
 
+      {/* Save Notification Toast */}
+      {showSaveToast && (
+        <div className="fixed bottom-4 right-4 z-50 bg-emerald-600 text-white font-extrabold text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-2 border border-emerald-400 animate-fadeIn">
+          <Check className="w-4 h-4 text-emerald-200" />
+          <span>¡Configuración de pestañas guardada para futuras sesiones!</span>
+        </div>
+      )}
+
       {/* REORDER TABS CONFIGURATION MODAL */}
       {isConfigOpen && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-slate-900">
@@ -398,7 +452,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-base">Reorganizar Orden de Pestañas</h3>
                   <p className="text-[11px] text-slate-500">
-                    Acomode las pestañas según su flujo de trabajo. También puede arrastrarlas directamente en la barra.
+                    Acomode las pestañas según su flujo de trabajo. Se guardará de manera permanente para sus siguientes sesiones.
                   </p>
                 </div>
               </div>
@@ -458,15 +512,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="flex items-center space-x-1.5 text-xs text-slate-600 hover:text-red-600 font-bold px-3 py-2 rounded-xl hover:bg-red-50 transition-all cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Restablecer Orden Original</span>
+                <span>Restablecer Orden</span>
               </button>
 
               <button
-                onClick={() => setIsConfigOpen(false)}
+                onClick={() => {
+                  saveTabsOrderToLocalStorage(tabsOrder);
+                  setShowSaveToast(true);
+                  setIsConfigOpen(false);
+                  setTimeout(() => setShowSaveToast(false), 3000);
+                }}
                 className="flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
               >
                 <Check className="w-4 h-4 text-emerald-400" />
-                <span>Guardar y Aplicar</span>
+                <span>Guardar Configuración Fija</span>
               </button>
             </div>
           </div>

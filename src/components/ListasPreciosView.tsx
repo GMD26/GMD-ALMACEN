@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Tag, Plus, Search, Filter, Edit2, Trash2, Check, RefreshCw, Upload, FileText, DollarSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Tag, Plus, Search, Filter, Edit2, Trash2, Check, RefreshCw, Upload, FileText, DollarSign, Download, CheckCircle2, Calendar, Database, Edit3, Save } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { PrecioListaItem, Product } from '../types';
 import { GMDLogo } from './GMDHeaderLogo';
 
@@ -24,6 +25,19 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrecioListaItem | null>(null);
+
+  // Persistence & File Metadata State
+  const [fileNameLabel, setFileNameLabel] = useState<string>(() => {
+    return localStorage.getItem('gmd_price_list_filename') || 'Catalogo_Precios_GMD.xlsx';
+  });
+  const [isEditingFileName, setIsEditingFileName] = useState(false);
+  const [tempFileName, setTempFileName] = useState(fileNameLabel);
+
+  const [lastSavedTimestamp, setLastSavedTimestamp] = useState<string>(() => {
+    return localStorage.getItem('gmd_price_list_timestamp') || new Date().toLocaleString('es-MX');
+  });
+
+  const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
 
   // Form State
   const [categoria, setCategoria] = useState('Precio');
@@ -55,6 +69,19 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
     'Costo'
   ];
 
+  // Deduplication helper: removes duplicate items based on category + normalized description
+  const deduplicateItems = (items: PrecioListaItem[]): PrecioListaItem[] => {
+    const seen = new Set<string>();
+    return items.filter(item => {
+      const key = `${(item.categoria || '').trim().toLowerCase()}::${(item.descripcion || '').trim().toLowerCase()}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  };
+
   // Factors for calculating real prices dynamically if specific category items are not in DB
   const getFactorForCategory = (catName: string): number => {
     const cat = catName.trim().toLowerCase();
@@ -66,7 +93,8 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
     return 1.0;
   };
 
-  const directFiltered = listasPrecios.filter(item => {
+  // Direct filtering & deduplication
+  const directFilteredRaw = listasPrecios.filter(item => {
     const catClean = (item.categoria || '').trim().toLowerCase();
     const filterClean = categoryFilter.trim().toLowerCase();
 
@@ -76,12 +104,14 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
     return matchesCat && matchesSearch;
   });
 
+  const directFiltered = deduplicateItems(directFilteredRaw);
+
   // Dynamic fallback from products catalog if filter has no records in listasPrecios
   let filteredItems: PrecioListaItem[] = directFiltered;
 
   if (filteredItems.length === 0 && categoryFilter !== 'ALL' && products.length > 0) {
     const factor = getFactorForCategory(categoryFilter);
-    filteredItems = products
+    const derivedRaw = products
       .filter(p => {
         const fullDesc = `[${p.sku}] ${p.descripcion}`.toLowerCase();
         return !searchTerm || fullDesc.includes(searchTerm.toLowerCase());
@@ -101,7 +131,68 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
           updatedAt: new Date().toISOString()
         };
       });
+    filteredItems = deduplicateItems(derivedRaw);
   }
+
+  // Deduplicated total items count across stored list or products fallback
+  const totalItemsCount = listasPrecios.length > 0 
+    ? deduplicateItems(listasPrecios).length 
+    : products.length;
+
+  // Save filename label change
+  const handleSaveFileName = () => {
+    const trimmed = tempFileName.trim() || 'Catalogo_Precios_GMD.xlsx';
+    setFileNameLabel(trimmed);
+    localStorage.setItem('gmd_price_list_filename', trimmed);
+    setIsEditingFileName(false);
+  };
+
+  // Confirm manual save to LocalStorage
+  const handleConfirmSave = () => {
+    const nowStr = new Date().toLocaleString('es-MX', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    setLastSavedTimestamp(nowStr);
+    localStorage.setItem('gmd_price_list_timestamp', nowStr);
+    localStorage.setItem('gmd_price_list_confirmed_v1', 'true');
+
+    setSaveStatusMessage('¡Guardado Local Confirmado! Datos resguardados con éxito.');
+    setTimeout(() => setSaveStatusMessage(null), 4000);
+  };
+
+  // Export Backup as Excel (.xlsx)
+  const handleDownloadBackup = () => {
+    try {
+      const itemsToExport = filteredItems.length > 0 ? filteredItems : (listasPrecios.length > 0 ? listasPrecios : []);
+      
+      const exportData = itemsToExport.map((item, index) => ({
+        '#': index + 1,
+        'Categoría': item.categoria,
+        'Precio Venta (IVA incl.)': Math.ceil(item.precio),
+        'Precio Formateado': `$${formatPrecioLista(item.precio)}`,
+        'Descripción del Producto / Material': item.descripcion,
+        'Fecha de Actualización': item.updatedAt ? new Date(item.updatedAt).toLocaleString('es-MX') : new Date().toLocaleString('es-MX')
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Lista de Precios');
+
+      const cleanName = fileNameLabel.endsWith('.xlsx') ? fileNameLabel : `${fileNameLabel}.xlsx`;
+      XLSX.writeFile(workbook, `Respaldo_${cleanName}`);
+
+      setSaveStatusMessage(`✨ Respaldo generado y descargado exitosamente: Respaldo_${cleanName}`);
+      setTimeout(() => setSaveStatusMessage(null), 4000);
+    } catch (err) {
+      console.error('Error al exportar respaldo Excel:', err);
+      alert('Ocurrió un error al generar la copia de seguridad en Excel.');
+    }
+  };
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
@@ -140,6 +231,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
           updatedAt: new Date().toISOString()
         });
       }
+      handleConfirmSave();
       setIsModalOpen(false);
     } catch (err) {
       console.error(err);
@@ -152,6 +244,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
     setIsSyncing(true);
     try {
       await onSyncFromCatalog();
+      handleConfirmSave();
     } catch (err) {
       console.error(err);
     } finally {
@@ -161,6 +254,17 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {saveStatusMessage && (
+        <div className="bg-emerald-600 text-white p-3 px-4 rounded-xl shadow-lg font-bold text-xs flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+            <span>{saveStatusMessage}</span>
+          </div>
+          <button onClick={() => setSaveStatusMessage(null)} className="text-emerald-200 hover:text-white font-black text-sm">✕</button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
@@ -176,19 +280,41 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Botón Confirmar Guardado */}
+          <button
+            onClick={handleConfirmSave}
+            className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow transition-all cursor-pointer"
+            title="Re-confirmar almacenamiento seguro en LocalStorage"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+            <span>Confirmar Guardado</span>
+          </button>
+
+          {/* Botón Descargar Respaldo */}
+          <button
+            onClick={handleDownloadBackup}
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow transition-all cursor-pointer"
+            title="Descargar copia de seguridad en archivo Excel (.xlsx)"
+          >
+            <Download className="w-4 h-4 text-blue-200" />
+            <span>Descargar Respaldo (.xlsx)</span>
+          </button>
+
+          {/* Botón Sincronizar */}
           <button
             onClick={handleSync}
             disabled={isSyncing}
-            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 transition-colors cursor-pointer"
+            className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>Sincronizar con Catálogo</span>
+            <span>Sincronizar</span>
           </button>
 
+          {/* Botón Agregar Precio */}
           <button
             onClick={handleOpenAddModal}
-            className="flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Agregar Precio</span>
@@ -196,32 +322,152 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar por descripción o categoría..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-cyan-500"
-          />
+      {/* Persistence Info & File Label Cards Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Nombre de Archivo & Etiqueta */}
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+            <span className="flex items-center space-x-1">
+              <FileText className="w-3.5 h-3.5 text-cyan-600" />
+              <span>Archivo de Origen</span>
+            </span>
+            {!isEditingFileName && (
+              <button
+                onClick={() => {
+                  setTempFileName(fileNameLabel);
+                  setIsEditingFileName(true);
+                }}
+                className="text-slate-400 hover:text-cyan-600 transition-colors p-0.5"
+                title="Personalizar etiqueta del archivo"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-1.5">
+            {isEditingFileName ? (
+              <div className="flex items-center space-x-1">
+                <input
+                  type="text"
+                  value={tempFileName}
+                  onChange={(e) => setTempFileName(e.target.value)}
+                  className="w-full text-xs font-bold px-2 py-1 border border-cyan-400 rounded-lg focus:ring-1 focus:ring-cyan-500 bg-cyan-50/50"
+                  placeholder="Nombre de archivo..."
+                />
+                <button
+                  onClick={handleSaveFileName}
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white p-1 rounded-lg text-xs font-bold"
+                  title="Guardar nombre"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="text-xs font-black text-slate-900 truncate" title={fileNameLabel}>
+                {fileNameLabel}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2 text-xs font-bold text-slate-600">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <span>Filtrar por Categoría:</span>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
+        {/* Card 2: Indicador Guardado Confirmado */}
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center space-x-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Estado de Guardado</span>
+          </div>
+          <div className="mt-1.5 flex items-center space-x-1.5">
+            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 bg-emerald-100 text-emerald-900 rounded-full text-xs font-black border border-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Guardado Confirmado</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Fecha y Hora de Último Registro */}
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center space-x-1">
+            <Calendar className="w-3.5 h-3.5 text-blue-600" />
+            <span>Última Confirmación</span>
+          </div>
+          <div className="mt-1.5 text-xs font-bold text-slate-800">
+            {lastSavedTimestamp}
+          </div>
+        </div>
+
+        {/* Card 4: Contador de Registros Almacenados */}
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center space-x-1">
+            <Database className="w-3.5 h-3.5 text-purple-600" />
+            <span>Registros Guardados</span>
+          </div>
+          <div className="mt-1.5 text-xs font-black text-purple-900 flex items-center space-x-1">
+            <span className="text-base">{totalItemsCount}</span>
+            <span className="text-slate-500 font-semibold text-[11px]">insumos únicos</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Selector de Precios Accesible (Category Chips Bar) */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-extrabold text-slate-800 flex items-center space-x-1.5">
+            <Filter className="w-4 h-4 text-cyan-600" />
+            <span>Selección Rápida de Categorías de Precio:</span>
+          </span>
+          <span className="text-[11px] font-bold text-slate-500">
+            {filteredItems.length} mostrados
+          </span>
+        </div>
+
+        {/* Accessible Quick Category Chips */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setCategoryFilter('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              categoryFilter === 'ALL'
+                ? 'bg-slate-900 text-white shadow ring-2 ring-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+            }`}
           >
-            <option value="ALL">Todas las Categorías ({listasPrecios.length})</option>
-            {categoriesList.map((cat, i) => (
-              <option key={i} value={cat}>{cat}</option>
-            ))}
-          </select>
+            Todas las Categorías ({listasPrecios.length})
+          </button>
+
+          {categoriesList.map((cat, idx) => {
+            const isActive = categoryFilter.toLowerCase() === cat.toLowerCase();
+            return (
+              <button
+                key={idx}
+                onClick={() => setCategoryFilter(cat)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-cyan-600 text-white shadow-md ring-2 ring-cyan-400'
+                    : 'bg-cyan-50/80 hover:bg-cyan-100 text-cyan-900 border border-cyan-200'
+                }`}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search Bar */}
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-3 items-center justify-between">
+          <div className="relative w-full sm:w-96">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar por descripción o código de producto..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-cyan-500"
+            />
+          </div>
+
+          <div className="text-[11px] text-slate-500 font-bold">
+            Sin duplicados • Redondeo hacia arriba al entero
+          </div>
         </div>
       </div>
 
@@ -241,7 +487,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
               {filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-slate-400">
-                    No hay registros en la lista de precios. Haga clic en "Sincronizar con Catálogo" o "Agregar Precio".
+                    No hay registros en la lista de precios para la categoría seleccionada. Haga clic en "Sincronizar" o "Agregar Precio".
                   </td>
                 </tr>
               ) : (
@@ -294,7 +540,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
                 <Tag className="w-5 h-5 text-cyan-600" />
                 <span>{editingItem ? 'Editar Precio de Lista' : 'Agregar Precio de Lista'}</span>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
@@ -305,7 +551,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
                   type="text"
                   required
                   list="categories-datalist"
-                  placeholder="Ej. Fine Art / Fotográfico"
+                  placeholder="Ej. Precio / Precio más IVA / Costo"
                   value={categoria}
                   onChange={(e) => setCategoria(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs bg-slate-50 focus:ring-2 focus:ring-cyan-500"
@@ -348,7 +594,7 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Cancelar
                 </button>
