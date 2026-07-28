@@ -26,7 +26,11 @@ import {
   FileCheck,
   Globe,
   User,
-  Layers
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Columns
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { ActiveTab, UserProfile } from '../types';
@@ -40,6 +44,7 @@ interface NavbarProps {
   onLogin: () => void;
   onLogout: () => void;
   lowStockCount: number;
+  onOpenDatabaseManager?: () => void;
 }
 
 const DEFAULT_TAB_ORDER: ActiveTab[] = [
@@ -77,8 +82,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   userProfile,
   onLogin,
   onLogout,
-  lowStockCount
+  lowStockCount,
+  onOpenDatabaseManager
 }) => {
+  const navScrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Tab Layout mode: 'scroll' (1 fila con flechas) vs 'multiline' (2 filas/multirrenglón)
+  const [tabsLayout, setTabsLayout] = useState<'scroll' | 'multiline'>(() => {
+    return (localStorage.getItem('gmd_tabs_layout_v1') as 'scroll' | 'multiline') || 'scroll';
+  });
+
+  const toggleTabsLayout = () => {
+    const next = tabsLayout === 'scroll' ? 'multiline' : 'scroll';
+    setTabsLayout(next);
+    localStorage.setItem('gmd_tabs_layout_v1', next);
+  };
+
+  const handleScrollNav = (direction: 'left' | 'right') => {
+    if (navScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -260 : 260;
+      navScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
   // Tab order state from localStorage or default
   const [tabsOrder, setTabsOrder] = useState<ActiveTab[]>(() => {
     try {
@@ -312,6 +337,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">Organizar Pestañas</span>
             </button>
 
+            {/* Database Management Header Button */}
+            {onOpenDatabaseManager && (
+              <button
+                onClick={onOpenDatabaseManager}
+                className="hidden sm:flex items-center space-x-1.5 bg-purple-950/80 hover:bg-purple-900 text-purple-200 border border-purple-800/80 font-bold text-xs px-3 py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
+                title="Gestión de Base de Datos (Respaldo, Google Drive y Eliminación Segura)"
+              >
+                <Database className="w-3.5 h-3.5 text-purple-400" />
+                <span>Gestión BD</span>
+              </button>
+            )}
+
             {user ? (
               <div className="flex items-center space-x-3 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60">
                 {user.photoURL ? (
@@ -390,48 +427,106 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Dynamic & Draggable Navigation Tabs Bar (Supports multi-row on mobile) */}
-        <nav className="flex flex-wrap sm:flex-nowrap gap-1 overflow-x-auto py-2 scrollbar-none border-t border-slate-800/80 items-center">
-          {tabsOrder.map((tabId, idx) => {
-            const def = tabDefs[tabId];
-            if (!def) return null;
+        {/* Desktop Tab Navigation Bar with Scroll Arrows, Multiline Toggle and Fijar Button */}
+        <div className="hidden sm:flex items-center border-t border-slate-800/80 py-1.5 gap-1.5">
+          {/* Scroll Left Arrow */}
+          {tabsLayout === 'scroll' && (
+            <button
+              onClick={() => handleScrollNav('left')}
+              className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors shrink-0 cursor-pointer border border-slate-700/60"
+              title="Desplazar pestañas hacia la izquierda"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
 
-            const active = isTabActive(tabId);
-            const isDragging = draggedIndex === idx;
-            const isOver = dragOverIndex === idx;
+          {/* Dynamic & Draggable Navigation Tabs Bar */}
+          <nav
+            ref={navScrollRef}
+            className={`flex-1 flex gap-1 py-0.5 scrollbar-none transition-all ${
+              tabsLayout === 'multiline' ? 'flex-wrap overflow-visible' : 'flex-nowrap overflow-x-auto scroll-smooth'
+            }`}
+          >
+            {tabsOrder.map((tabId, idx) => {
+              const def = tabDefs[tabId];
+              if (!def) return null;
 
-            return (
-              <button
-                key={tabId}
-                draggable
-                onDragStart={(e) => handleDragStart(e, idx)}
-                onDragOver={(e) => handleDragOver(e, idx)}
-                onDrop={(e) => handleDrop(e, idx)}
-                onDragEnd={() => {
-                  setDraggedIndex(null);
-                  setDragOverIndex(null);
-                }}
-                onClick={() => setActiveTab(tabId)}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-grab active:cursor-grabbing select-none group relative ${
-                  active ? def.activeClass : def.inactiveClass
-                } ${isDragging ? 'opacity-30 scale-95 border-2 border-dashed border-cyan-400' : ''} ${
-                  isOver ? 'ring-2 ring-cyan-400 scale-105 bg-slate-800' : ''
-                }`}
-                title={`Pestaña "${def.label}" (Arrastre horizontalmente para reordenar)`}
-              >
-                <GripVertical className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity -ml-1" />
-                {def.icon}
-                <span>{def.label}</span>
+              const active = isTabActive(tabId);
+              const isDragging = draggedIndex === idx;
+              const isOver = dragOverIndex === idx;
 
-                {def.hasBadge && lowStockCount > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold bg-white text-red-600 rounded-full animate-pulse">
-                    {lowStockCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
+              return (
+                <button
+                  key={tabId}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={() => {
+                    setDraggedIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                  onClick={() => setActiveTab(tabId)}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-grab active:cursor-grabbing select-none group relative ${
+                    active ? def.activeClass : def.inactiveClass
+                  } ${isDragging ? 'opacity-30 scale-95 border-2 border-dashed border-cyan-400' : ''} ${
+                    isOver ? 'ring-2 ring-cyan-400 scale-105 bg-slate-800' : ''
+                  }`}
+                  title={`Pestaña "${def.label}" (Arrastre horizontalmente para reordenar)`}
+                >
+                  <GripVertical className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity -ml-1" />
+                  {def.icon}
+                  <span>{def.label}</span>
+
+                  {def.hasBadge && lowStockCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 text-[10px] font-extrabold bg-white text-red-600 rounded-full animate-pulse">
+                      {lowStockCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Scroll Right Arrow */}
+          {tabsLayout === 'scroll' && (
+            <button
+              onClick={() => handleScrollNav('right')}
+              className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors shrink-0 cursor-pointer border border-slate-700/60"
+              title="Desplazar pestañas hacia la derecha"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Toggle Multiline (2 filas) vs Scroll (1 fila) */}
+          <button
+            onClick={toggleTabsLayout}
+            className={`p-1.5 rounded-lg transition-all shrink-0 cursor-pointer border text-xs font-bold flex items-center space-x-1 ${
+              tabsLayout === 'multiline'
+                ? 'bg-cyan-600 text-white border-cyan-400 shadow-sm'
+                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700/60'
+            }`}
+            title={tabsLayout === 'multiline' ? 'Cambiar a 1 fila con scroll' : 'Cambiar a vista multirrenglón (2 filas)'}
+          >
+            <Columns className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{tabsLayout === 'multiline' ? '2 Filas' : '1 Fila'}</span>
+          </button>
+
+          {/* Fijar Pestañas Desktop Button */}
+          <button
+            onClick={() => {
+              saveTabsOrderToLocalStorage(tabsOrder);
+              setShowSaveToast(true);
+              setTimeout(() => setShowSaveToast(false), 3000);
+            }}
+            className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 border border-emerald-400"
+            title="Fijar y guardar esta configuración de pestañas para futuras sesiones"
+          >
+            <Check className="w-3.5 h-3.5 text-emerald-200" />
+            <span>Fijar Pestañas</span>
+          </button>
+        </div>
       </div>
 
       {/* Save Notification Toast */}

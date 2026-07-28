@@ -54,6 +54,7 @@ import { ListasPreciosView } from './components/ListasPreciosView';
 import { PedidosMercadoLibreView } from './components/PedidosMercadoLibreView';
 import { PedidosCotizacionesView } from './components/PedidosCotizacionesView';
 import { PedidosWebView } from './components/PedidosWebView';
+import { DatabaseManagementModal } from './components/DatabaseManagementModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('portada');
@@ -73,6 +74,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
 
   // Quick Action Selected Product
@@ -195,50 +197,58 @@ export default function App() {
     // Pedidos Especiales Listener
     const pedidosEspRef = collection(db, 'pedidos_especiales');
     const unsubPedidosEsp = onSnapshot(pedidosEspRef, (snapshot) => {
-      const list: PedidoEspecial[] = [];
+      const itemsMap = new Map<string, PedidoEspecial>();
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as PedidoEspecial);
+        itemsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as PedidoEspecial);
       });
+      const list = Array.from(itemsMap.values());
+      list.sort((a, b) => new Date(b.createdAt || b.fecha || 0).getTime() - new Date(a.createdAt || a.fecha || 0).getTime());
       setPedidosEspeciales(list);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_especiales'));
 
     // Listas de Precios Listener
     const listasPreciosRef = collection(db, 'listas_precios');
     const unsubListasPrecios = onSnapshot(listasPreciosRef, (snapshot) => {
-      const list: PrecioListaItem[] = [];
+      const itemsMap = new Map<string, PrecioListaItem>();
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as PrecioListaItem);
+        itemsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as PrecioListaItem);
       });
-      setListasPrecios(list);
+      setListasPrecios(Array.from(itemsMap.values()));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'listas_precios'));
 
     // Pedidos Mercado Libre Listener
     const pedidosMLRef = collection(db, 'pedidos_ml');
     const unsubPedidosML = onSnapshot(pedidosMLRef, (snapshot) => {
-      const list: PedidoMercadoLibre[] = [];
+      const itemsMap = new Map<string, PedidoMercadoLibre>();
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as PedidoMercadoLibre);
+        itemsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as PedidoMercadoLibre);
       });
+      const list = Array.from(itemsMap.values());
+      list.sort((a, b) => new Date(b.createdAt || b.fecha || 0).getTime() - new Date(a.createdAt || a.fecha || 0).getTime());
       setPedidosML(list);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_ml'));
 
     // Pedidos Cotizaciones (Mónica y César) Listener
     const cotizacionesRef = collection(db, 'pedidos_cotizaciones');
     const unsubCotizaciones = onSnapshot(cotizacionesRef, (snapshot) => {
-      const list: CotizacionPedido[] = [];
+      const itemsMap = new Map<string, CotizacionPedido>();
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as CotizacionPedido);
+        itemsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as CotizacionPedido);
       });
+      const list = Array.from(itemsMap.values());
+      list.sort((a, b) => new Date(b.createdAt || b.fecha || 0).getTime() - new Date(a.createdAt || a.fecha || 0).getTime());
       setPedidosCotizaciones(list);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_cotizaciones'));
 
     // Pedidos Web Listener
     const webRef = collection(db, 'pedidos_web');
     const unsubWeb = onSnapshot(webRef, (snapshot) => {
-      const list: PedidoWeb[] = [];
+      const itemsMap = new Map<string, PedidoWeb>();
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as PedidoWeb);
+        itemsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as PedidoWeb);
       });
+      const list = Array.from(itemsMap.values());
+      list.sort((a, b) => new Date(b.createdAt || b.fechaPedido || 0).getTime() - new Date(a.createdAt || a.fechaPedido || 0).getTime());
       setPedidosWeb(list);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'pedidos_web'));
 
@@ -271,6 +281,132 @@ export default function App() {
     } catch (err) {
       console.error("Error seeding catalog:", err);
       setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, cantidadActual: 0, minStock: 0 })));
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Full Database Export Handler
+  const handleExportFullDatabaseBackup = () => {
+    const backupObj = {
+      exportDate: new Date().toISOString(),
+      appName: 'Grupo Más Digital - Almacén e Inventario',
+      products,
+      inventory_movements: movements,
+      purchase_orders: purchaseOrders,
+      customers,
+      remisiones,
+      apartados,
+      pedidos_especiales: pedidosEspeciales,
+      listas_precios: listasPrecios,
+      pedidos_ml: pedidosML,
+      pedidos_cotizaciones: pedidosCotizaciones,
+      pedidos_web: pedidosWeb
+    };
+
+    const jsonString = JSON.stringify(backupObj, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Respaldo_BaseDatos_GMD_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Full Database Restore Handler
+  const handleRestoreDatabaseBackup = async (backupData: any) => {
+    setIsSeeding(true);
+    try {
+      const collectionsMap: Record<string, any[]> = {
+        products: backupData.products || [],
+        inventory_movements: backupData.inventory_movements || backupData.movements || [],
+        purchase_orders: backupData.purchase_orders || backupData.purchaseOrders || [],
+        customers: backupData.customers || [],
+        remisiones: backupData.remisiones || [],
+        apartados: backupData.apartados || [],
+        pedidos_especiales: backupData.pedidos_especiales || backupData.pedidosEspeciales || [],
+        listas_precios: backupData.listas_precios || backupData.listasPrecios || [],
+        pedidos_ml: backupData.pedidos_ml || backupData.pedidosML || [],
+        pedidos_cotizaciones: backupData.pedidos_cotizaciones || backupData.pedidosCotizaciones || [],
+        pedidos_web: backupData.pedidos_web || backupData.pedidosWeb || []
+      };
+
+      for (const [colName, items] of Object.entries(collectionsMap)) {
+        if (!Array.isArray(items) || items.length === 0) continue;
+
+        for (let i = 0; i < items.length; i += 350) {
+          const chunk = items.slice(i, i + 350);
+          const batch = writeBatch(db);
+          chunk.forEach((item: any) => {
+            const docId = item.id || item.sku || doc(collection(db, colName)).id;
+            const docRef = doc(db, colName, docId);
+            batch.set(docRef, cleanFirestoreData(item), { merge: true });
+          });
+          await batch.commit();
+        }
+      }
+
+      console.log('Base de datos restaurada correctamente.');
+    } catch (err) {
+      console.error('Error al restaurar base de datos:', err);
+      throw err;
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Full Database Clear/Delete Handler
+  const handleClearAllDatabase = async () => {
+    setIsSeeding(true);
+    try {
+      const collectionsToClear = [
+        'products',
+        'inventory_movements',
+        'purchase_orders',
+        'customers',
+        'remisiones',
+        'apartados',
+        'pedidos_especiales',
+        'listas_precios',
+        'pedidos_ml',
+        'pedidos_cotizaciones',
+        'pedidos_web'
+      ];
+
+      for (const colName of collectionsToClear) {
+        const colRef = collection(db, colName);
+        const snapshot = await getDocs(colRef);
+        if (!snapshot.empty) {
+          const docs = snapshot.docs;
+          for (let i = 0; i < docs.length; i += 350) {
+            const chunk = docs.slice(i, i + 350);
+            const batch = writeBatch(db);
+            chunk.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+        }
+      }
+
+      setProducts([]);
+      setMovements([]);
+      setPurchaseOrders([]);
+      setCustomers([]);
+      setRemisiones([]);
+      setApartados([]);
+      setPedidosEspeciales([]);
+      setListasPrecios([]);
+      setPedidosML([]);
+      setPedidosCotizaciones([]);
+      setPedidosWeb([]);
+
+      console.log('Base de datos eliminada completamente.');
+    } catch (err) {
+      console.error('Error al eliminar base de datos:', err);
+      throw err;
     } finally {
       setIsSeeding(false);
     }
@@ -1000,6 +1136,7 @@ export default function App() {
         onLogin={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
         lowStockCount={lowStockCount}
+        onOpenDatabaseManager={() => setIsDatabaseModalOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -1197,6 +1334,17 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         onLoginWithGoogle={handleGoogleLogin}
         onGuestLogin={handleGuestLogin}
+      />
+
+      {/* Database Management Modal */}
+      <DatabaseManagementModal
+        isOpen={isDatabaseModalOpen}
+        onClose={() => setIsDatabaseModalOpen(false)}
+        onExportBackup={handleExportFullDatabaseBackup}
+        onRestoreBackup={handleRestoreDatabaseBackup}
+        onClearDatabase={handleClearAllDatabase}
+        totalProductsCount={products.length}
+        totalOrdersCount={pedidosCotizaciones.length + pedidosML.length + pedidosWeb.length + pedidosEspeciales.length}
       />
 
     </div>
