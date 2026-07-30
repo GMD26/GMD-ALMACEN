@@ -14,7 +14,9 @@ import {
   RefreshCw
 } from 'lucide-react';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { Product } from '../types';
+import { normalizeRowToProduct } from '../utils/productNormalizer';
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -40,57 +42,17 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Function to process row object into Product model
-  const normalizeRowToProduct = (row: Record<string, any>, idx: number): Omit<Product, 'id'> | null => {
-    // Find keys matching SKU, Desc, etc.
-    const keys = Object.keys(row);
-    const findValue = (possibleNames: string[]) => {
-      const match = keys.find(k => possibleNames.includes(k.trim().toUpperCase()));
-      return match ? String(row[match]).trim() : '';
-    };
-
-    const sku = findValue(['SKU', 'CLAVE', 'CODIGO', 'CÓDIGO', 'ID', 'NO.']);
-    const descripcion = findValue(['DESCRIPCION', 'DESCRIPCIÓN', 'PRODUCTO', 'NOMBRE', 'DETALLE', 'CONCEPTO']);
-    
-    if (!sku && !descripcion) return null; // skip empty rows
-
-    const finalSku = sku || `SKU-${idx + 1}`;
-    const finalDesc = descripcion || `Producto ${finalSku}`;
-    const medida = findValue(['MEDIDA', 'MEDIDAS', 'TAMANO', 'TAMAÑO', 'PRESENTACION', 'PRESENTACIÓN']) || 'Estándar';
-    const unidad = findValue(['UNIDAD', 'UM', 'U.M.', 'MEDIDA_UNIDAD']) || 'PZA';
-    const categoria = findValue(['CATEGORIA', 'CATEGORÍA', 'FAMILIA', 'GRUPO', 'LINEA', 'LÍNEA']) || 'General';
-    const ubicacion = findValue(['UBICACION', 'UBICACIÓN', 'ALMACEN', 'ALMACÉN', 'RACK', 'UBICACION_ALMACEN']) || 'Almacén Central';
-
-    const parseNum = (val: string, fallback = 0) => {
-      const num = parseFloat(val.replace(/[^0-9.-]+/g, ''));
-      return isNaN(num) ? fallback : num;
-    };
-
-    const precio = parseNum(findValue(['PRECIO', 'PRECIO UNITARIO', 'PRECIO_UNITARIO', 'P.U.', 'PVP', 'PRECIO VENTA']), 100);
-    const costo = parseNum(findValue(['COSTO', 'COSTO UNITARIO', 'COSTO_UNITARIO', 'PRECIO COSTO']), Math.round(precio * 0.65));
-    const precioIva = Math.round(precio * 1.16 * 100) / 100;
-
-    const rawStock = parseNum(findValue(['CANTIDAD', 'STOCK', 'EXISTENCIA', 'CANTIDAD_ACTUAL', 'CANTIDAD ACTUAL']), 0);
-    const rawMinStock = parseNum(findValue(['MIN', 'STOCK MINIMO', 'STOCK MÍNIMO', 'MINIMO', 'MIN_STOCK']), 0);
-
-    return {
-      sku: finalSku.toUpperCase(),
-      descripcion: finalDesc,
-      medida,
-      unidad: unidad.toUpperCase(),
-      precio,
-      precioIva,
-      costo,
-      cantidadActual: forceZeroStock ? 0 : rawStock,
-      ubicacionAlmacen: ubicacion,
-      minStock: forceZeroStock ? 0 : rawMinStock,
-      categoria,
-      updatedAt: new Date().toISOString(),
-      updatedBy: 'Importación Masiva'
-    };
+  const processRow = (row: Record<string, any>, idx: number): Omit<Product, 'id'> | null => {
+    const prod = normalizeRowToProduct(row, idx, 'Importación Masiva Excel');
+    if (!prod) return null;
+    if (forceZeroStock) {
+      prod.cantidadActual = 0;
+      prod.minStock = 0;
+    }
+    return prod;
   };
 
-  // Handle File Upload
+  // Handle File Upload (Excel .xlsx, .xls, .csv, .txt)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -99,32 +61,67 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setIsLoading(true);
     setParseErrors([]);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      dynamicTyping: false,
-      complete: (results) => {
-        setIsLoading(false);
-        const products: Omit<Product, 'id'>[] = [];
-        const errors: string[] = [];
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
 
-        results.data.forEach((row: any, idx: number) => {
-          const prod = normalizeRowToProduct(row, idx);
-          if (prod) {
-            products.push(prod);
-          } else {
-            errors.push(`Línea ${idx + 2}: Registro incompleto omitido.`);
-          }
-        });
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsName = wb.SheetNames[0];
+          const ws = wb.Sheets[wsName];
+          const jsonData = XLSX.utils.sheet_to_json<any>(ws);
 
-        setParsedProducts(products);
-        setParseErrors(errors);
-      },
-      error: (err) => {
-        setIsLoading(false);
-        setParseErrors([`Error al leer el archivo: ${err.message}`]);
-      }
-    });
+          const products: Omit<Product, 'id'>[] = [];
+          const errors: string[] = [];
+
+          jsonData.forEach((row: any, idx: number) => {
+            const prod = processRow(row, idx);
+            if (prod) {
+              products.push(prod);
+            } else {
+              errors.push(`Fila ${idx + 2}: Registro incompleto omitido.`);
+            }
+          });
+
+          setParsedProducts(products);
+          setParseErrors(errors);
+        } catch (err: any) {
+          setParseErrors([`Error al procesar la hoja Excel: ${err?.message || 'Formato no reconocido'}`]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        complete: (results) => {
+          setIsLoading(false);
+          const products: Omit<Product, 'id'>[] = [];
+          const errors: string[] = [];
+
+          results.data.forEach((row: any, idx: number) => {
+            const prod = processRow(row, idx);
+            if (prod) {
+              products.push(prod);
+            } else {
+              errors.push(`Línea ${idx + 2}: Registro incompleto omitido.`);
+            }
+          });
+
+          setParsedProducts(products);
+          setParseErrors(errors);
+        },
+        error: (err) => {
+          setIsLoading(false);
+          setParseErrors([`Error al leer el archivo CSV/TXT: ${err.message}`]);
+        }
+      });
+    }
   };
 
   // Handle Paste Text
@@ -144,7 +141,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         const errors: string[] = [];
 
         results.data.forEach((row: any, idx: number) => {
-          const prod = normalizeRowToProduct(row, idx);
+          const prod = processRow(row, idx);
           if (prod) {
             products.push(prod);
           } else {

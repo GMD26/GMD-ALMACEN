@@ -74,33 +74,74 @@ export const CatalogPickerModal: React.FC<CatalogPickerModalProps> = ({
         </div>
 
         {/* Search & Category Filter Bar */}
-        <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 space-y-3">
           
-          {/* Search Input */}
-          <div className="md:col-span-2 relative">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              autoFocus
-              placeholder="Buscar por SKU, descripción, medida, peso (ej. 240 g/m²), precio..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-cyan-500 shadow-xs"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Search Input with Clear Button */}
+            <div className="md:col-span-2 relative flex items-center">
+              <Search className="w-4 h-4 absolute left-3 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Buscar por SKU, descripción, medida, peso (ej. 240 g/m²), precio..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-9 py-2.5 min-h-[44px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500 shadow-xs"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full cursor-pointer"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Category Dropdown */}
+            <div className="relative">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full p-2.5 min-h-[44px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-xs"
+              >
+                <option value="ALL">Todas las Categorías ({categories.length})</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Category Dropdown */}
-          <div className="relative">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-xs"
-            >
-              <option value="ALL">Todas las Categorías ({categories.length})</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+          {/* Quick Filter Chips for Kronaline Popular SKUs / Subfamilies */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 mr-1">Filtros Rápidos:</span>
+            {[
+              { label: 'Todos', code: '' },
+              { label: 'PA (Acetatos)', code: 'PA' },
+              { label: 'HB / PH (Foto)', code: 'PH' },
+              { label: 'BP / BX (Bond)', code: 'BP' },
+              { label: 'DTF (Textil)', code: 'DTF' },
+              { label: 'GV / Vinil', code: 'GV' },
+              { label: 'CV / Canvas', code: 'CV' },
+              { label: 'ART (FineArt)', code: 'ART' },
+              { label: 'KE (K+E)', code: 'KE' }
+            ].map(chip => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setSearchTerm(chip.code)}
+                className={`px-3 py-1.5 min-h-[36px] rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
+                  searchTerm === chip.code
+                    ? 'bg-cyan-600 text-white border-cyan-500 shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-cyan-50 dark:hover:bg-slate-700 hover:border-cyan-400'
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
           </div>
         </div>
 

@@ -341,15 +341,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             {onOpenDatabaseManager && (
               <button
                 onClick={onOpenDatabaseManager}
-                className="hidden sm:flex items-center space-x-1.5 bg-purple-950/80 hover:bg-purple-900 text-purple-200 border border-purple-800/80 font-bold text-xs px-3 py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
-                title="Gestión de Base de Datos (Respaldo, Google Drive y Eliminación Segura)"
+                className="hidden sm:flex items-center space-x-1.5 bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 border border-emerald-700/80 font-bold text-xs px-3 py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
+                title="Cargar / Actualizar Hoja Excel sin borrar existencias e historial"
               >
-                <Database className="w-3.5 h-3.5 text-purple-400" />
-                <span>Gestión BD</span>
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Cargar / Actualizar Excel</span>
               </button>
             )}
 
-            {user ? (
+            {user && (
               <div className="flex items-center space-x-3 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60">
                 {user.photoURL ? (
                   <img 
@@ -367,7 +367,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="font-semibold text-slate-200">{user.displayName || user.email?.split('@')[0]}</div>
                   <div className="text-cyan-400 text-[10px] flex items-center space-x-1">
                     <CheckCircle2 className="w-3 h-3 text-cyan-400" />
-                    <span>Google Verificado</span>
+                    <span>Usuario Verificado</span>
                   </div>
                 </div>
                 <button
@@ -378,16 +378,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
-              <button
-                onClick={onLogin}
-                className="flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-medium text-xs px-4 py-2 rounded-lg transition-all shadow-md shadow-cyan-500/20"
-              >
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M12.24 10.285V13.4h6.887c-.58 2.319-2.72 4.041-5.327 4.041-3.2 0-5.8-2.6-5.8-5.8s2.6-5.8 5.8-5.8c1.4 0 2.68.48 3.68 1.28l2.44-2.44C18.4 3.2 15.48 2 12.24 2 6.58 2 2 6.58 2 12.24s4.58 10.24 10.24 10.24c5.88 0 9.8-4.12 9.8-9.96 0-.68-.08-1.36-.2-2.24h-9.6z" />
-                </svg>
-                <span>Acceder con Google</span>
-              </button>
             )}
           </div>
         </div>

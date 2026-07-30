@@ -17,7 +17,9 @@ import {
   writeBatch,
   getDocs,
   handleFirestoreError,
-  OperationType
+  OperationType,
+  uploadBackupToGoogleDrive,
+  getCachedGoogleAccessToken
 } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
@@ -76,6 +78,28 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+
+  // Dark Mode State with localStorage Persistence
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('gmd_dark_mode');
+    if (saved !== null) {
+      return saved === 'true';
+    }
+    return true; // Default to Dark Mode for high contrast
+  });
+
+  useEffect(() => {
+    localStorage.setItem('gmd_dark_mode', String(darkMode));
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  const toggleDarkMode = () => {
+    setDarkMode(prev => !prev);
+  };
 
   // Quick Action Selected Product
   const [quickProductForIn, setQuickProductForIn] = useState<Product | null>(null);
@@ -267,20 +291,103 @@ export default function App() {
     };
   }, []);
 
-  // Seed Catalog Function with 0 stock & 0 minStock
+  // Seed Catalog Function with safe non-destructive check
   const seedDatabaseInternal = async () => {
     setIsSeeding(true);
     try {
+      const snapshot = await getDocs(collection(db, 'products'));
+      const existingSkus = new Set(snapshot.docs.map(d => d.id.toUpperCase()));
+
       const batch = writeBatch(db);
       INITIAL_PRODUCTS.forEach((prod) => {
         const docRef = doc(db, 'products', prod.sku);
-        batch.set(docRef, { ...prod, cantidadActual: 0, minStock: 0 });
+        if (!existingSkus.has(prod.sku.toUpperCase())) {
+          batch.set(docRef, { ...prod, cantidadActual: 0, minStock: 0 }, { merge: true });
+        }
       });
       await batch.commit();
-      console.log("Database seeded successfully with 0 stock and 0 minStock!");
+      console.log("Database seeded safely without overwriting existing stock!");
     } catch (err) {
       console.error("Error seeding catalog:", err);
       setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, cantidadActual: 0, minStock: 0 })));
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Smart Update Catalog Function that PRESERVES current stock levels, minStock, and all movements
+  const handleSmartUpdateCatalogDatabase = async () => {
+    setIsSeeding(true);
+    try {
+      // 1. Fetch current live products from Firestore to record real-time stock
+      const productsRef = collection(db, 'products');
+      const snapshot = await getDocs(productsRef);
+      const existingMap = new Map<string, Product>();
+      snapshot.forEach(docSnap => {
+        const p = docSnap.data() as Product;
+        const key = (p.sku || docSnap.id).toUpperCase();
+        existingMap.set(key, p);
+      });
+
+      // 2. Fetch latest Kronaline catalog from Express Server or INITIAL_PRODUCTS
+      let catalogToSync = INITIAL_PRODUCTS;
+      try {
+        const res = await fetch('/api/catalog/kronaline');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.products) && data.products.length > 0) {
+            catalogToSync = data.products;
+          }
+        }
+      } catch (e) {
+        console.warn("Utilizando catálogo local INITIAL_PRODUCTS para sincronizar:", e);
+      }
+
+      // 3. Batch write preserving cantidadActual, minStock, and location for existing products
+      let updatedCount = 0;
+      let newCount = 0;
+
+      for (let i = 0; i < catalogToSync.length; i += 350) {
+        const chunk = catalogToSync.slice(i, i + 350);
+        const batch = writeBatch(db);
+
+        chunk.forEach((prod) => {
+          const key = prod.sku.toUpperCase();
+          const docRef = doc(db, 'products', prod.sku);
+
+          if (existingMap.has(key)) {
+            const existing = existingMap.get(key)!;
+            // PRESERVE: Keep existing current stock, minStock, and location
+            batch.set(docRef, {
+              ...prod,
+              cantidadActual: existing.cantidadActual !== undefined ? existing.cantidadActual : 0,
+              minStock: existing.minStock !== undefined ? existing.minStock : 0,
+              ubicacionAlmacen: existing.ubicacionAlmacen || prod.ubicacionAlmacen || 'Almacén Central',
+              updatedAt: new Date().toISOString(),
+              updatedBy: 'Sincronización Inteligente Catálogo'
+            }, { merge: true });
+            updatedCount++;
+          } else {
+            // New product: initialize with 0 stock
+            batch.set(docRef, {
+              ...prod,
+              cantidadActual: 0,
+              minStock: 0,
+              updatedAt: new Date().toISOString(),
+              updatedBy: 'Sincronización Catálogo Nube'
+            }, { merge: true });
+            newCount++;
+          }
+        });
+
+        await batch.commit();
+      }
+
+      console.log(`Catálogo actualizado inteligentemente: ${updatedCount} actualizados, ${newCount} nuevos. Existencias preservadas.`);
+      return { updatedCount, newCount };
+    } catch (err) {
+      console.error("Error al actualizar catálogo de la base de datos:", err);
+      throw err;
     } finally {
       setIsSeeding(false);
     }
@@ -315,6 +422,37 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  // Google Drive Direct Backup Handler
+  const handleSaveToGoogleDrive = async () => {
+    let token = getCachedGoogleAccessToken();
+    if (!token) {
+      // Prompt user to sign in with Google to get access token
+      await signInWithGoogle();
+      token = getCachedGoogleAccessToken();
+      if (!token) {
+        throw new Error('No se pudo obtener el token de acceso de Google Drive. Por favor intente iniciar sesión nuevamente.');
+      }
+    }
+
+    const backupObj = {
+      exportDate: new Date().toISOString(),
+      appName: 'Grupo Más Digital - Almacén e Inventario',
+      products,
+      inventory_movements: movements,
+      purchase_orders: purchaseOrders,
+      customers,
+      remisiones,
+      apartados,
+      pedidos_especiales: pedidosEspeciales,
+      listas_precios: listasPrecios,
+      pedidos_ml: pedidosML,
+      pedidos_cotizaciones: pedidosCotizaciones,
+      pedidos_web: pedidosWeb
+    };
+
+    await uploadBackupToGoogleDrive(backupObj, token);
   };
 
   // Full Database Restore Handler
@@ -461,13 +599,40 @@ export default function App() {
       const now = new Date().toISOString();
       const user = userProfile?.displayName || 'Importación Masiva';
 
-      // Map to full Product objects with id = sku
-      const formattedProducts: Product[] = newProducts.map(p => ({
-        ...p,
-        id: p.sku,
-        updatedAt: now,
-        updatedBy: user
-      }));
+      // Fetch existing live products to preserve stock and minStock
+      const productsRef = collection(db, 'products');
+      const snapshot = await getDocs(productsRef);
+      const existingMap = new Map<string, Product>();
+      snapshot.forEach(docSnap => {
+        const p = docSnap.data() as Product;
+        const key = (p.sku || docSnap.id).toUpperCase();
+        existingMap.set(key, p);
+      });
+
+      // Map to full Product objects preserving current inventory if replaceExisting is false
+      const formattedProducts: Product[] = newProducts.map(p => {
+        const key = p.sku.toUpperCase();
+        const existing = existingMap.get(key);
+
+        if (existing && !replaceExisting) {
+          return {
+            ...p,
+            id: p.sku,
+            cantidadActual: existing.cantidadActual !== undefined ? existing.cantidadActual : 0,
+            minStock: existing.minStock !== undefined ? existing.minStock : 0,
+            ubicacionAlmacen: existing.ubicacionAlmacen || p.ubicacionAlmacen || 'Almacén Central',
+            updatedAt: now,
+            updatedBy: user
+          };
+        }
+
+        return {
+          ...p,
+          id: p.sku,
+          updatedAt: now,
+          updatedBy: user
+        };
+      });
 
       // Write in batches of 350 to Firestore
       const chunks: Product[][] = [];
@@ -495,7 +660,7 @@ export default function App() {
         });
       }
 
-      console.log(`${formattedProducts.length} productos importados con éxito.`);
+      console.log(`${formattedProducts.length} productos procesados con éxito preservando inventario e historial.`);
     } catch (err) {
       console.error("Error en importación masiva:", err);
       throw err;
@@ -1125,7 +1290,7 @@ export default function App() {
   const lowStockCount = products.filter(p => p.minStock > 0 && p.cantidadActual <= p.minStock).length;
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans antialiased flex flex-col selection:bg-cyan-500 selection:text-white">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased flex flex-col selection:bg-cyan-500 selection:text-white transition-colors duration-200">
       
       {/* Top Corporate Navigation */}
       <Navbar
@@ -1148,6 +1313,8 @@ export default function App() {
             onOpenRemision={() => setActiveTab('remisiones')}
             onOpenListasPrecios={() => setActiveTab('listas-precios')}
             onImportListasPrecios={handleSyncPreciosFromCatalog}
+            onBulkImportProducts={handleBulkImportProducts}
+            onOpenDatabaseModal={() => setIsDatabaseModalOpen(true)}
             totalProductsCount={products.length}
           />
         )}
@@ -1341,8 +1508,11 @@ export default function App() {
         isOpen={isDatabaseModalOpen}
         onClose={() => setIsDatabaseModalOpen(false)}
         onExportBackup={handleExportFullDatabaseBackup}
+        onExportToGoogleDrive={handleSaveToGoogleDrive}
         onRestoreBackup={handleRestoreDatabaseBackup}
         onClearDatabase={handleClearAllDatabase}
+        onSmartUpdateCatalog={handleSmartUpdateCatalogDatabase}
+        onBulkImportProducts={handleBulkImportProducts}
         totalProductsCount={products.length}
         totalOrdersCount={pedidosCotizaciones.length + pedidosML.length + pedidosWeb.length + pedidosEspeciales.length}
       />

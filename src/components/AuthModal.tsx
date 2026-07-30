@@ -77,30 +77,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* Primary Google Auth Button */}
+        {/* Direct Gmail / Email Login Entry */}
         <div className="space-y-3">
-          <button
-            onClick={handleGoogleClick}
-            disabled={loading}
-            className="w-full py-3 px-4 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-cyan-500/25 flex items-center justify-center space-x-3 transition-all cursor-pointer disabled:opacity-50"
-          >
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-              <path d="M12.24 10.285V13.4h6.887c-.58 2.319-2.72 4.041-5.327 4.041-3.2 0-5.8-2.6-5.8-5.8s2.6-5.8 5.8-5.8c1.4 0 2.68.48 3.68 1.28l2.44-2.44C18.4 3.2 15.48 2 12.24 2 6.58 2 2 6.58 2 12.24s4.58 10.24 10.24 10.24c5.88 0 9.8-4.12 9.8-9.96 0-.68-.08-1.36-.2-2.24h-9.6z" />
-            </svg>
-            <span>{loading ? 'Iniciando Sesión...' : 'Iniciar Sesión con Google'}</span>
-          </button>
-
-          <div className="flex items-center my-3">
-            <div className="flex-1 border-t border-slate-800" />
-            <span className="px-3 text-[11px] text-slate-500 font-semibold uppercase">O con tu correo @gmail.com</span>
-            <div className="flex-1 border-t border-slate-800" />
-          </div>
-
-          {/* Fallback Gmail Direct Entry */}
           <form onSubmit={handleCustomEmailSubmit} className="space-y-3">
             <div>
               <label className="block text-slate-400 text-xs font-semibold mb-1">
-                Cuenta de Gmail Corporativa / Personal
+                Ingresa tu Correo Institucional o Personal
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
@@ -117,10 +99,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center space-x-2 transition-colors cursor-pointer"
+              className="w-full py-3 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/25 flex items-center justify-center space-x-2 transition-all cursor-pointer"
             >
-              <span>Acceder con Cuenta Gmail</span>
-              <ArrowRight className="w-4 h-4 text-cyan-400" />
+              <span>Ingresar al Sistema</span>
+              <ArrowRight className="w-4 h-4 text-cyan-200" />
             </button>
           </form>
         </div>

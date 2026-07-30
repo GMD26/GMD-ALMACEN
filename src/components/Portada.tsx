@@ -22,17 +22,23 @@ import {
   Eye,
   EyeOff,
   Globe,
-  Mail
+  Mail,
+  Database,
+  HardDrive,
+  RefreshCw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { PrecioListaItem } from '../types';
+import { PrecioListaItem, Product } from '../types';
 import { GMDLogo } from './GMDHeaderLogo';
+import { normalizeRowToProduct } from '../utils/productNormalizer';
 
 interface PortadaProps {
   onOpenInventario: () => void;
   onOpenRemision: () => void;
   onOpenListasPrecios?: () => void;
   onImportListasPrecios?: (items: Omit<PrecioListaItem, 'id'>[]) => Promise<void>;
+  onBulkImportProducts?: (products: Omit<Product, 'id'>[], replaceExisting: boolean) => Promise<void>;
+  onOpenDatabaseModal?: () => void;
   totalProductsCount: number;
 }
 
@@ -41,11 +47,16 @@ export const Portada: React.FC<PortadaProps> = ({
   onOpenRemision,
   onOpenListasPrecios,
   onImportListasPrecios,
+  onBulkImportProducts,
+  onOpenDatabaseModal,
   totalProductsCount
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dbExcelInputRef = useRef<HTMLInputElement>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('Precio');
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [dbUploadStatus, setDbUploadStatus] = useState<string | null>(null);
+  const [isProcessingDbExcel, setIsProcessingDbExcel] = useState(false);
 
   // Dashboard customization state stored in localStorage
   const [showQuickShortcuts, setShowQuickShortcuts] = useState<boolean>(() => {
@@ -136,6 +147,51 @@ export const Portada: React.FC<PortadaProps> = ({
         if (onOpenListasPrecios) onOpenListasPrecios();
       }, 1200);
     }
+  };
+
+  const handleDatabaseExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingDbExcel(true);
+    setDbUploadStatus(`Procesando catálogo desde Excel (${file.name})...`);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const jsonData = XLSX.utils.sheet_to_json<any>(ws);
+
+        const products: Omit<Product, 'id'>[] = [];
+        jsonData.forEach((row: any, idx: number) => {
+          const prod = normalizeRowToProduct(row, idx);
+          if (prod) products.push(prod);
+        });
+
+        if (products.length === 0) {
+          alert('No se encontraron registros de productos válidos en el archivo Excel.');
+          setIsProcessingDbExcel(false);
+          setDbUploadStatus(null);
+          return;
+        }
+
+        if (onBulkImportProducts) {
+          await onBulkImportProducts(products, false);
+          setDbUploadStatus(`✨ ¡Base de Datos Actualizada! Se cargaron/actualizaron ${products.length} productos desde "${file.name}" preservando existencias e historial.`);
+          setTimeout(() => setDbUploadStatus(null), 5000);
+        }
+      } catch (err: any) {
+        console.error(err);
+        alert(`Error al procesar el archivo Excel: ${err?.message || 'Verifique el formato'}`);
+        setDbUploadStatus(null);
+      } finally {
+        setIsProcessingDbExcel(false);
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
   const toggleSetting = (key: 'shortcuts' | 'prices' | 'metrics') => {
@@ -361,101 +417,97 @@ export const Portada: React.FC<PortadaProps> = ({
 
       </div>
 
-      {/* MODULE 3: LISTAS DE PRECIOS (7 CATEGORÍAS DE PRECIO) - SUBIR EXCEL / PDF */}
-      {showPriceModule && (
-        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 border border-indigo-800/60 text-white shadow-2xl space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-indigo-800/50 pb-6">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30">
-                <Tag className="w-8 h-8" />
-              </div>
-              <div>
-                <div className="inline-flex items-center space-x-2 text-indigo-300 font-extrabold text-xs uppercase tracking-wider mb-0.5">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Gestión de Precios de Venta</span>
-                </div>
-                <h2 className="text-2xl font-black text-white">Listas de Precios (7 Categorías Disponibles)</h2>
-                <p className="text-xs text-indigo-200 mt-1 max-w-xl">
-                  Carga o actualiza tus archivos <strong className="text-white">Excel (.xlsx) o PDF</strong> con los precios de venta correspondientes a las 7 categorías asignables a clientes y remisiones.
-                </p>
-              </div>
+      {/* MÓDULO ÚNICO Y SIMPLIFICADO DE CARGA Y ACTUALIZACIÓN DE EXCEL */}
+      <div className="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 rounded-3xl p-8 border-2 border-emerald-500/60 text-white shadow-2xl space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-emerald-800/50 pb-6">
+          <div className="flex items-center space-x-3">
+            <div className="p-3.5 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30">
+              <FileSpreadsheet className="w-9 h-9 text-emerald-400" />
             </div>
-
-            {onOpenListasPrecios && (
-              <button
-                onClick={onOpenListasPrecios}
-                className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-400 text-slate-950 font-black text-xs px-5 py-3 rounded-2xl shadow-lg transition-all cursor-pointer whitespace-nowrap"
-              >
-                <span>Ver Listas de Precios</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
+            <div>
+              <div className="inline-flex items-center space-x-2 bg-emerald-500/20 text-emerald-300 font-extrabold text-[11px] px-3 py-0.5 rounded-full border border-emerald-500/30 uppercase tracking-wider mb-1">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Único Punto Oficial de Carga y Actualización</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-white">Cargar / Actualizar Hoja de Excel (.xlsx, .csv)</h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                ¿Tienes una hoja de datos Excel con la información actualizada de productos o precios? Cárgala aquí en un solo paso para sincronizar todo tu catálogo de <strong className="text-white">{totalProductsCount || 613} SKUs</strong>.
+              </p>
+            </div>
           </div>
 
-          {/* 7 Price Categories Grid & File Upload Link */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            
-            {/* Categories Pill List */}
-            <div className="md:col-span-7 space-y-3">
-              <label className="block text-xs font-bold text-indigo-300 uppercase tracking-wider">
-                Categorías de Precio Habilitadas:
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {priceCategories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`p-2.5 rounded-xl border text-left transition-all text-xs font-bold cursor-pointer ${
-                      selectedCategory === cat 
-                        ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' 
-                        : 'bg-slate-800/80 border-slate-700/80 text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {onOpenDatabaseModal && (
+            <button
+              onClick={onOpenDatabaseModal}
+              className="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-extrabold text-xs px-4 py-3 rounded-2xl border border-slate-700 shadow-md transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 self-start md:self-auto"
+            >
+              <HardDrive className="w-4 h-4 text-cyan-400" />
+              <span>Opciones Avanzadas de BD</span>
+            </button>
+          )}
+        </div>
 
-            {/* Upload Excel / PDF Area */}
-            <div className="md:col-span-5 bg-slate-800/90 border border-indigo-500/30 rounded-2xl p-5 space-y-3 text-center">
-              <div className="flex items-center justify-center space-x-2 text-indigo-300">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-                <FileText className="w-5 h-5 text-cyan-400" />
-                <span className="font-extrabold text-xs">Subir Lista (Excel / PDF)</span>
-              </div>
-
-              <p className="text-[11px] text-slate-300">
-                Carga tu archivo para la categoría seleccionada: <strong className="text-white font-bold">{selectedCategory}</strong>
+        {/* Informative Assurances Banner */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="p-4 bg-slate-900/90 rounded-2xl border border-emerald-500/30 flex items-start space-x-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <strong className="text-white font-bold block text-sm">1. Tus Existencias, Entradas y Salidas NO Cambian</strong>
+              <p className="text-slate-300 text-[11px] mt-0.5 leading-normal">
+                Tus piezas disponibles en almacén (`cantidadActual`), kardex e historial de entradas y salidas permanecen 100% intactas sin ningún cambio.
               </p>
-
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept=".xlsx, .xls, .pdf, .csv"
-                className="hidden"
-              />
-
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 cursor-pointer"
-              >
-                <Upload className="w-4 h-4 text-indigo-200" />
-                <span>Seleccionar Archivo Excel o PDF</span>
-              </button>
-
-              {uploadStatus && (
-                <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold flex items-center space-x-2 text-left">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                  <span>{uploadStatus}</span>
-                </div>
-              )}
             </div>
+          </div>
 
+          <div className="p-4 bg-slate-900/90 rounded-2xl border border-emerald-500/30 flex items-start space-x-3">
+            <RefreshCw className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+            <div>
+              <strong className="text-white font-bold block text-sm">2. Sincronización Automática de Precios y SKUs</strong>
+              <p className="text-slate-300 text-[11px] mt-0.5 leading-normal">
+                Se actualizan automáticamente precios en las 7 categorías, costo base, descripciones, IVA, unidades y medidas de todos tus productos.
+              </p>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Upload Button */}
+        <div className="bg-slate-900/95 border border-emerald-500/40 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
+              <Upload className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white">Selecciona tu archivo Excel o CSV (.xlsx, .xls, .csv)</h3>
+              <p className="text-xs text-slate-400">GMD26 o listas oficiales de proveedores / KRONALINE</p>
+            </div>
+          </div>
+
+          <div className="w-full sm:w-auto shrink-0">
+            <input
+              type="file"
+              ref={dbExcelInputRef}
+              onChange={handleDatabaseExcelUpload}
+              accept=".xlsx, .xls, .csv"
+              className="hidden"
+            />
+            <button
+              onClick={() => dbExcelInputRef.current?.click()}
+              disabled={isProcessingDbExcel}
+              className="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs px-8 py-4 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all cursor-pointer flex items-center justify-center space-x-2"
+            >
+              <Upload className="w-4 h-4" />
+              <span>{isProcessingDbExcel ? 'Actualizando Base de Datos...' : 'Cargar / Actualizar Archivo Excel'}</span>
+            </button>
+          </div>
+        </div>
+
+        {dbUploadStatus && (
+          <div className="p-4 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-2xl text-xs font-bold flex items-center space-x-2.5 animate-fadeIn">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <span>{dbUploadStatus}</span>
+          </div>
+        )}
+      </div>
 
       {/* Business Trust & Capability Highlights */}
       {showMetricsHighlight && (

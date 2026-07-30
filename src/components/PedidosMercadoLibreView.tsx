@@ -101,17 +101,20 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
         const row = rawRows[i];
         if (!row || row.length === 0) continue;
 
-        // Mapeo exacto solicitado:
+        // Mapeo de columnas solicitado:
         // Número de pedido → columna A (idx 0)
-        // SKU → columnas R (idx 17) y V (idx 21)
-        // Nombre del cliente → columna AA (idx 26)
+        // Fecha de pedido → columna B (idx 1)
+        // SKU → columna S (idx 18)
+        // Descripción → columna U (idx 20)
+        // Nombre del cliente → columna Z (idx 25)
         const numPedido = String(row[0] || '').trim();
-        const skuVal = String(row[17] || row[21] || '').trim();
-        const clienteVal = String(row[26] || '').trim() || 'Cliente ML';
+        const fechaVal = String(row[1] || '').trim();
+        const skuVal = String(row[18] || row[17] || row[21] || '').trim();
+        const descVal = String(row[20] || row[2] || row[3] || 'Producto ML').trim();
+        const clienteVal = String(row[25] || row[26] || '').trim() || 'Cliente ML';
 
         if (!numPedido && !skuVal) continue; // Skip empty rows
 
-        const descVal = skuVal ? `[SKU: ${skuVal}] ${row[2] || row[3] || 'Producto ML'}` : String(row[2] || row[1] || 'Producto ML').trim();
         const cantNum = parseInt(String(row[5] || row[4] || '1'), 10) || 1;
 
         await onAddPedidoML({
@@ -123,8 +126,8 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
           pedidoAKronaline: false,
           entregado: false,
           cancelado: false,
-          fecha: new Date().toISOString(),
-          notas: `Importado Excel ML (Col A: ${numPedido || '—'}, Col R/V SKU: ${skuVal || '—'}, Col AA: ${clienteVal})`
+          fecha: fechaVal ? new Date(fechaVal).toISOString() : new Date().toISOString(),
+          notas: `Importado Excel ML (Col A: ${numPedido || '—'}, Col S SKU: ${skuVal || '—'}, Col Z: ${clienteVal})`
         });
         importedCount++;
       }

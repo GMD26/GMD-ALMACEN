@@ -34,7 +34,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || configData?.appId || '',
 };
 
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || configData?.firestoreDatabaseId || undefined;
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || (configData as Record<string, any>)?.firestoreDatabaseId || undefined;
 
 let app;
 try {
@@ -56,19 +56,113 @@ try {
 export const db = getFirestore(app, databaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
-// Google Sign In helper
+let cachedGoogleAccessToken: string | null = null;
+
+export const getCachedGoogleAccessToken = () => cachedGoogleAccessToken;
+
+// Google Sign In helper with access token capture
 export const signInWithGoogle = async () => {
   try {
     googleProvider.setCustomParameters({
       prompt: 'select_account'
     });
     const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedGoogleAccessToken = credential.accessToken;
+    }
     return result.user;
   } catch (error: any) {
     console.error("Error logging in with Google:", error);
     throw error;
   }
+};
+
+/**
+ * Uploads a JSON backup directly to Google Drive
+ */
+export const uploadBackupToGoogleDrive = async (backupDataObj: any, token?: string) => {
+  const accessToken = token || cachedGoogleAccessToken;
+  if (!accessToken) {
+    throw new Error('No hay una sesión activa de Google con permisos de Drive. Por favor inicie sesión con Google primero.');
+  }
+
+  const fileName = `Respaldo_BaseDatos_GMD_${new Date().toISOString().split('T')[0]}.json`;
+  const fileContent = JSON.stringify(backupDataObj, null, 2);
+
+  const metadata = {
+    name: fileName,
+    mimeType: 'application/json',
+    description: 'Respaldo automático de base de datos de Grupo Más Digital Almacén e Inventario'
+  };
+
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', new Blob([fileContent], { type: 'application/json' }));
+
+  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: form
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Error al subir a Google Drive: ${response.statusText} - ${errText}`);
+  }
+
+  return await response.json();
+};
+
+/**
+ * Lists backup files from user's Google Drive
+ */
+export const listGoogleDriveBackups = async (token?: string) => {
+  const accessToken = token || cachedGoogleAccessToken;
+  if (!accessToken) {
+    throw new Error('No hay una sesión activa de Google. Inicie sesión con Google.');
+  }
+
+  const queryParam = encodeURIComponent("name contains 'Respaldo_BaseDatos_GMD' and mimeType = 'application/json' and trashed = false");
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${queryParam}&fields=files(id,name,createdTime,size,webViewLink)&orderBy=createdTime desc`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al consultar archivos en Google Drive.');
+  }
+
+  const data = await response.json();
+  return data.files || [];
+};
+
+/**
+ * Downloads JSON content from a specific Google Drive file ID
+ */
+export const fetchGoogleDriveFileContent = async (fileId: string, token?: string) => {
+  const accessToken = token || cachedGoogleAccessToken;
+  if (!accessToken) {
+    throw new Error('No hay una sesión activa de Google. Inicie sesión con Google.');
+  }
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al descargar el contenido del respaldo desde Google Drive.');
+  }
+
+  return await response.json();
 };
 
 export const logoutUser = async () => {

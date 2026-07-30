@@ -5,9 +5,13 @@ export interface Product {
   medida: string;
   unidad: string;
   peso?: string; // Peso / Gramaje (e.g., 240 g/m²)
-  precio: number;
-  precioIva: number;
-  costo: number;
+  precio: number; // Precio base
+  precioIva: number; // Precio más IVA
+  precioDescuento?: number; // Precio descuento
+  precio114?: number; // 1.14
+  precio116?: number; // 1.16
+  precio12798?: number; // 1.2798
+  costo: number; // COSTO
   cantidadActual: number;
   ubicacionAlmacen: string;
   minStock: number;
@@ -148,9 +152,19 @@ export interface PedidoEspecial {
 
 export interface PrecioListaItem {
   id: string;
-  categoria: string;
-  precio: number;
+  sku?: string;
+  codigo?: string;
   descripcion: string;
+  medida?: string;
+  unidad?: string;
+  precio: number;
+  precioIva?: number;
+  precioDescuento?: number;
+  precio114?: number;
+  precio116?: number;
+  precio12798?: number;
+  costo?: number;
+  categoria: string;
   updatedAt?: string;
 }
 
@@ -217,6 +231,7 @@ export interface PedidoWeb {
   pedidoKronaline: boolean;
   guiaGenerada: boolean;
   completado: boolean;
+  cancelado?: boolean;
   facturado?: boolean;
   notas?: string;
   createdAt: string;

@@ -38,7 +38,8 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'TODOS' | 'PENDIENTES' | 'COMPLETADOS'>('TODOS');
+  const [statusFilter, setStatusFilter] = useState<'TODOS' | 'PENDIENTES' | 'COMPLETADOS' | 'CANCELADOS'>('TODOS');
+  const [sortOrder, setSortOrder] = useState<'NUM_DESC' | 'DATE_DESC'>('NUM_DESC');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
 
@@ -76,11 +77,20 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
         p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.direccionEnvio.toLowerCase().includes(searchTerm.toLowerCase());
 
-      if (statusFilter === 'COMPLETADOS') return matchesSearch && p.completado;
-      if (statusFilter === 'PENDIENTES') return matchesSearch && !p.completado;
+      if (statusFilter === 'CANCELADOS') return matchesSearch && !!p.cancelado;
+      if (statusFilter === 'COMPLETADOS') return matchesSearch && p.completado && !p.cancelado;
+      if (statusFilter === 'PENDIENTES') return matchesSearch && !p.completado && !p.cancelado;
       return matchesSearch;
     })
     .sort((a, b) => {
+      if (sortOrder === 'NUM_DESC') {
+        const numA = parseInt(a.numPedido.replace(/\D/g, '') || '0', 10);
+        const numB = parseInt(b.numPedido.replace(/\D/g, '') || '0', 10);
+        if (numA !== numB && !isNaN(numA) && !isNaN(numB) && numA > 0 && numB > 0) {
+          return numB - numA;
+        }
+        return b.numPedido.localeCompare(a.numPedido, undefined, { numeric: true });
+      }
       const dateA = new Date(a.fechaPedido || a.createdAt || 0).getTime();
       const dateB = new Date(b.fechaPedido || b.createdAt || 0).getTime();
       return dateB - dateA;
@@ -392,28 +402,47 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center space-x-2 text-xs font-bold text-slate-600">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <span>Filtrar Estatus:</span>
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-600">
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <span className="text-[10px] text-slate-500 uppercase px-2 font-black">Orden:</span>
             <button
-              onClick={() => setStatusFilter('TODOS')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${statusFilter === 'TODOS' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              onClick={() => setSortOrder(sortOrder === 'NUM_DESC' ? 'DATE_DESC' : 'NUM_DESC')}
+              className="px-2.5 py-1 bg-white text-slate-900 rounded-lg shadow-xs font-black flex items-center space-x-1 cursor-pointer"
+              title="Cambiar orden de clasificación"
             >
-              Todos ({pedidos.length})
+              <span>{sortOrder === 'NUM_DESC' ? '# Pedido (Mayor a menor)' : 'Fecha (Más reciente)'}</span>
             </button>
-            <button
-              onClick={() => setStatusFilter('PENDIENTES')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${statusFilter === 'PENDIENTES' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              Pendientes
-            </button>
-            <button
-              onClick={() => setStatusFilter('COMPLETADOS')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${statusFilter === 'COMPLETADOS' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              Completados
-            </button>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <span>Estatus:</span>
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setStatusFilter('TODOS')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${statusFilter === 'TODOS' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Todos ({pedidos.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('PENDIENTES')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${statusFilter === 'PENDIENTES' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Pendientes
+              </button>
+              <button
+                onClick={() => setStatusFilter('COMPLETADOS')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${statusFilter === 'COMPLETADOS' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Completados
+              </button>
+              <button
+                onClick={() => setStatusFilter('CANCELADOS')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${statusFilter === 'CANCELADOS' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Cancelados
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -434,21 +463,22 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                 <th className="py-3 px-4 text-center">Guía</th>
                 <th className="py-3 px-4 text-center bg-purple-950 text-purple-300">Facturado</th>
                 <th className="py-3 px-4 text-center">Completado</th>
+                <th className="py-3 px-4 text-center bg-red-950 text-red-300">Cancelado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-slate-400">
+                  <td colSpan={12} className="text-center py-12 text-slate-400">
                     No hay pedidos web registrados en este filtro. Haga clic en "Sincronizar API WooCommerce", importe desde CSV o agregue un pedido.
                   </td>
                 </tr>
               ) : (
                 filteredPedidos.map((pedido) => (
-                  <tr key={pedido.id} className={`hover:bg-slate-50 transition-colors ${pedido.completado ? 'bg-emerald-50/20' : ''}`}>
+                  <tr key={pedido.id} className={`hover:bg-slate-50 transition-colors ${pedido.cancelado ? 'bg-red-50/40 opacity-75' : pedido.completado ? 'bg-emerald-50/20' : ''}`}>
                     <td className="py-3 px-4 font-black text-slate-900">
-                      {pedido.numPedido}
+                      <span className={pedido.cancelado ? 'line-through text-slate-400' : ''}>{pedido.numPedido}</span>
                     </td>
 
                     <td className="py-3 px-4 text-slate-600 font-semibold">
@@ -528,13 +558,28 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                     <td className="py-3 px-4 text-center">
                       <button
                         onClick={() => onUpdatePedido(pedido.id, { completado: !pedido.completado })}
-                        className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        disabled={pedido.cancelado}
+                        className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer disabled:opacity-40 ${
                           pedido.completado
                             ? 'bg-emerald-600 text-white shadow-sm'
                             : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                         }`}
                       >
                         {pedido.completado ? '✓ Completado' : 'En Proceso'}
+                      </button>
+                    </td>
+
+                    {/* Cancelado */}
+                    <td className="py-3 px-4 text-center bg-red-50/50">
+                      <button
+                        onClick={() => onUpdatePedido(pedido.id, { cancelado: !pedido.cancelado })}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          pedido.cancelado
+                            ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-400'
+                            : 'bg-white border border-slate-300 text-slate-500 hover:border-red-400'
+                        }`}
+                      >
+                        {pedido.cancelado ? '✕ CANCELADO' : 'Activo'}
                       </button>
                     </td>
 

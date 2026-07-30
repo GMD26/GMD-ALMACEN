@@ -12,27 +12,40 @@ import {
   RefreshCw, 
   ShieldAlert, 
   FileJson,
+  FileSpreadsheet,
   Sparkles,
   ExternalLink,
   Check
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
+import { Product } from '../types';
+import { normalizeRowToProduct } from '../utils/productNormalizer';
 
 interface DatabaseManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
   onExportBackup: () => void;
+  onExportToGoogleDrive?: () => Promise<void>;
   onRestoreBackup: (backupData: any) => Promise<void>;
   onClearDatabase: () => Promise<void>;
+  onSmartUpdateCatalog?: () => Promise<{ updatedCount: number; newCount: number }>;
+  onBulkImportProducts?: (products: Omit<Product, 'id'>[], replaceExisting: boolean) => Promise<void>;
   totalProductsCount: number;
   totalOrdersCount: number;
 }
+
+const REQUIRED_DELETE_TEXT = 'ELIMINAR BASE DE DATOS GMD';
 
 export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = ({
   isOpen,
   onClose,
   onExportBackup,
+  onExportToGoogleDrive,
   onRestoreBackup,
   onClearDatabase,
+  onSmartUpdateCatalog,
+  onBulkImportProducts,
   totalProductsCount,
   totalOrdersCount
 }) => {
@@ -44,43 +57,164 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
   const [confirmInputText, setConfirmInputText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // State for Google Drive loader
   const [showDriveLoader, setShowDriveLoader] = useState(false);
   const [driveUrlInput, setDriveUrlInput] = useState('');
 
-  if (!isOpen) return null;
+  const handleSmartSyncCatalog = async () => {
+    if (!onSmartUpdateCatalog) return;
+    setIsSyncingCatalog(true);
+    setStatusMessage('Sincronizando catálogo inteligentemente sin alterar existencias ni movimientos...');
+    try {
+      const result = await onSmartUpdateCatalog();
+      setStatusMessage(`✨ Sincronización exitosa: ${result.updatedCount} actualizados, ${result.newCount} nuevos creados.`);
+      setTimeout(() => setStatusMessage(null), 3500);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Error al actualizar catálogo: ${err?.message || 'Intente de nuevo'}`);
+      setStatusMessage(null);
+    } finally {
+      setIsSyncingCatalog(false);
+    }
+  };
 
-  const REQUIRED_DELETE_TEXT = 'ELIMINAR MI BASE DE DATOS';
+  const handleDriveExport = async () => {
+    if (!onExportToGoogleDrive) return;
+    setIsUploadingToDrive(true);
+    setStatusMessage('Subiendo respaldo completo a Google Drive...');
+    try {
+      await onExportToGoogleDrive();
+      setStatusMessage('✨ Respaldo guardado exitosamente en Google Drive');
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Error al guardar en Google Drive: ${err?.message || 'Intente de nuevo'}`);
+      setStatusMessage(null);
+    } finally {
+      setIsUploadingToDrive(false);
+    }
+  };
+
+  if (!isOpen) return null;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsRestoring(true);
-    setStatusMessage('Leyendo y analizando archivo de base de datos...');
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv');
 
-    try {
-      const text = await file.text();
-      const jsonData = JSON.parse(text);
+    if (isExcel) {
+      setIsRestoring(true);
+      setStatusMessage(`Leyendo y procesando hoja de datos Excel/CSV (${file.name})...`);
 
-      if (!jsonData || (typeof jsonData !== 'object')) {
-        throw new Error('El archivo no contiene un formato de respaldo válido en JSON.');
-      }
+      try {
+        if (file.name.endsWith('.csv')) {
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+              const products: Omit<Product, 'id'>[] = [];
+              results.data.forEach((row: any, idx: number) => {
+                const prod = normalizeRowToProduct(row, idx);
+                if (prod) products.push(prod);
+              });
 
-      await onRestoreBackup(jsonData);
-      setStatusMessage('✨ ¡Base de datos restaurada y sincronizada correctamente!');
-      setTimeout(() => {
+              if (products.length === 0) {
+                alert('No se detectaron registros válidos en la hoja CSV.');
+                setIsRestoring(false);
+                setStatusMessage(null);
+                return;
+              }
+
+              if (onBulkImportProducts) {
+                await onBulkImportProducts(products, false);
+                setStatusMessage(`✨ ¡Base de datos actualizada! Se cargaron/actualizaron ${products.length} productos desde Excel sin borrar existencias.`);
+                setTimeout(() => {
+                  setStatusMessage(null);
+                  setIsRestoring(false);
+                  onClose();
+                }, 3000);
+              }
+            }
+          });
+        } else {
+          // XLSX / XLS
+          const reader = new FileReader();
+          reader.onload = async (evt) => {
+            try {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsName = wb.SheetNames[0];
+              const ws = wb.Sheets[wsName];
+              const jsonData = XLSX.utils.sheet_to_json<any>(ws);
+
+              const products: Omit<Product, 'id'>[] = [];
+              jsonData.forEach((row: any, idx: number) => {
+                const prod = normalizeRowToProduct(row, idx);
+                if (prod) products.push(prod);
+              });
+
+              if (products.length === 0) {
+                alert('No se detectaron productos en la hoja de Excel. Verifique que tenga columnas SKU / DESCRIPCION / PRECIO.');
+                setIsRestoring(false);
+                setStatusMessage(null);
+                return;
+              }
+
+              if (onBulkImportProducts) {
+                await onBulkImportProducts(products, false);
+                setStatusMessage(`✨ ¡Base de datos actualizada! Se procesaron ${products.length} productos desde ${file.name} preservando existencias e historial.`);
+                setTimeout(() => {
+                  setStatusMessage(null);
+                  setIsRestoring(false);
+                  onClose();
+                }, 3000);
+              }
+            } catch (err: any) {
+              console.error(err);
+              alert(`Error al procesar el archivo Excel: ${err?.message || 'Verifique el formato'}`);
+              setIsRestoring(false);
+              setStatusMessage(null);
+            }
+          };
+          reader.readAsBinaryString(file);
+        }
+      } catch (err: any) {
+        console.error(err);
+        alert(`Error al procesar el archivo: ${err?.message}`);
+        setIsRestoring(false);
         setStatusMessage(null);
-        onClose();
-      }, 2500);
-    } catch (err: any) {
-      console.error(err);
-      alert(`⚠️ Error al cargar la base de datos:\n${err?.message || 'Asegúrese de subir un archivo JSON de respaldo de GMD.'}`);
-      setStatusMessage(null);
-    } finally {
-      setIsRestoring(false);
+      }
+    } else {
+      // JSON backup file
+      setIsRestoring(true);
+      setStatusMessage('Leyendo y analizando archivo JSON de base de datos...');
+
+      try {
+        const text = await file.text();
+        const jsonData = JSON.parse(text);
+
+        if (!jsonData || (typeof jsonData !== 'object')) {
+          throw new Error('El archivo no contiene un formato de respaldo válido en JSON.');
+        }
+
+        await onRestoreBackup(jsonData);
+        setStatusMessage('✨ ¡Base de datos restaurada y sincronizada correctamente!');
+        setTimeout(() => {
+          setStatusMessage(null);
+          setIsRestoring(false);
+          onClose();
+        }, 2500);
+      } catch (err: any) {
+        console.error(err);
+        alert(`⚠️ Error al cargar la base de datos:\n${err?.message || 'Asegúrese de subir un archivo JSON de respaldo de GMD o un Excel de productos.'}`);
+        setStatusMessage(null);
+        setIsRestoring(false);
+      }
     }
   };
 
@@ -208,54 +342,120 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
         {/* Action Options */}
         <div className="space-y-4">
 
+          {/* Option 0: Smart Update Catalog (Preserves Stock & Movements) */}
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50/50 p-4 rounded-2xl border border-emerald-200 space-y-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="text-xs font-black text-emerald-950 flex items-center space-x-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>Actualización Inteligente del Catálogo (Preserva Existencias y Movimientos)</span>
+                </h4>
+                <p className="text-[11px] text-emerald-800/90 font-medium mt-0.5">
+                  Actualiza precios, descripciones e IVA del catálogo servidor KRONALINE BASE sin tocar tus piezas disponibles ni borrar tu historial.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSmartSyncCatalog}
+                disabled={isSyncingCatalog}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 min-h-[44px] rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-1.5 shrink-0"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncingCatalog ? 'animate-spin' : ''}`} />
+                <span>{isSyncingCatalog ? 'Sincronizando...' : 'Actualizar Catálogo Sin Perder Datos'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/60 text-[10px] font-bold text-emerald-900">
+              <span className="flex items-center space-x-1">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Existencias intactas (`cantidadActual`)</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Entradas/Salidas intactas</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Pedidos y Remisiones intactos</span>
+              </span>
+            </div>
+          </div>
+
           {/* Option 1: Download Full Backup */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 p-4 rounded-2xl border border-blue-200 flex items-center justify-between gap-4">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 p-4 rounded-2xl border border-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h4 className="text-xs font-black text-blue-950 flex items-center space-x-1.5">
                 <Download className="w-4 h-4 text-blue-600" />
-                <span>1. Descargar Respaldo Completo (.json)</span>
+                <span>1. Descargar o Guardar Respaldo Completo (.json)</span>
               </h4>
               <p className="text-[11px] text-blue-800/80 font-medium mt-0.5">
-                Exporta todas las colecciones (Productos, Pedidos Mónica/César, ML, Web, Remisiones, Precios) en un archivo JSON seguro.
+                Exporta todas las colecciones (Productos, Pedidos, Remisiones, Precios) en un archivo JSON local o directamente en Google Drive.
               </p>
             </div>
-            <button
-              onClick={onExportBackup}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
-            >
-              <Download className="w-4 h-4" />
-              <span>Descargar</span>
-            </button>
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                onClick={onExportBackup}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-1.5"
+                title="Descargar archivo JSON a su equipo"
+              >
+                <Download className="w-4 h-4" />
+                <span>Descargar</span>
+              </button>
+
+              {onExportToGoogleDrive && (
+                <button
+                  onClick={handleDriveExport}
+                  disabled={isUploadingToDrive}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-1.5 border border-cyan-400"
+                  title="Guardar directamente en su cuenta de Google Drive"
+                >
+                  <Globe className="w-4 h-4 text-cyan-200" />
+                  <span>{isUploadingToDrive ? 'Guardando...' : 'Guardar en Drive'}</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Option 2: Load / Import Database (Local File or Google Drive) */}
+          {/* Option 2: Load / Import / Update Database (Excel, CSV or JSON Backup) */}
           <div className="bg-gradient-to-r from-purple-50 to-pink-50/50 p-4 rounded-2xl border border-purple-200 space-y-3">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h4 className="text-xs font-black text-purple-950 flex items-center space-x-1.5">
                   <Upload className="w-4 h-4 text-purple-600" />
-                  <span>2. Cargar Base de Datos (Archivo o Google Drive)</span>
+                  <span>2. Cargar / Actualizar Base de Datos (Excel, CSV o Respaldo JSON)</span>
                 </h4>
                 <p className="text-[11px] text-purple-800/80 font-medium mt-0.5">
-                  Restaure la base de datos desde un archivo JSON local o directamente desde su cuenta de Google Drive.
+                  Sube tu archivo <strong className="text-purple-900 font-extrabold">Excel (.xlsx, .csv)</strong> para actualizar los productos de la base de datos preservando existencias e historial, o restaura un respaldo JSON local / Google Drive.
                 </p>
               </div>
 
-              <div className="flex items-center space-x-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <input
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileUpload}
-                  accept=".json"
+                  accept=".xlsx, .xls, .csv, .json"
                   className="hidden"
                 />
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isRestoring}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow transition-all cursor-pointer flex items-center space-x-1.5"
+                  title="Subir hoja de datos Excel (.xlsx) o CSV con productos"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+                  <span>Subir Excel / CSV</span>
+                </button>
+
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isRestoring}
                   className="bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow transition-all cursor-pointer flex items-center space-x-1.5"
+                  title="Subir archivo de respaldo JSON"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>Subir Archivo</span>
+                  <FileJson className="w-4 h-4 text-purple-100" />
+                  <span>Subir JSON</span>
                 </button>
 
                 <button
@@ -263,7 +463,7 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
                   className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow transition-all cursor-pointer flex items-center space-x-1.5"
                 >
                   <Globe className="w-4 h-4 text-cyan-400" />
-                  <span>Google Drive</span>
+                  <span>Drive</span>
                 </button>
               </div>
             </div>
