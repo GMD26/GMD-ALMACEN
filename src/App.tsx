@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   db, 
   auth, 
@@ -38,7 +38,7 @@ import {
   PedidoWeb
 } from './types';
 import { INITIAL_PRODUCTS } from './data/initialCatalog';
-import { cleanFirestoreData } from './utils/firestoreSanitizer';
+import { cleanFirestoreData, toSafeDocId } from './utils/firestoreSanitizer';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
 import { InventoryList } from './components/InventoryList';
@@ -57,6 +57,7 @@ import { PedidosMercadoLibreView } from './components/PedidosMercadoLibreView';
 import { PedidosCotizacionesView } from './components/PedidosCotizacionesView';
 import { PedidosWebView } from './components/PedidosWebView';
 import { DatabaseManagementModal } from './components/DatabaseManagementModal';
+import { MobileBottomNav } from './components/MobileBottomNav';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('portada');
@@ -78,6 +79,8 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const isBulkImportingRef = useRef(false);
+  const productsCountRef = useRef(0);
 
   // Dark Mode State with localStorage Persistence
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -142,27 +145,57 @@ export default function App() {
       const itemsMap = new Map<string, Product>();
       snapshot.forEach((docSnap) => {
         const prod = { id: docSnap.id, ...docSnap.data() } as Product;
-        const key = (prod.sku || docSnap.id).toUpperCase();
-        if (!itemsMap.has(key)) {
-          itemsMap.set(key, prod);
-        } else {
-          const existing = itemsMap.get(key)!;
-          if (docSnap.id === prod.sku || (prod.updatedAt && (!existing.updatedAt || prod.updatedAt > existing.updatedAt))) {
-            itemsMap.set(key, prod);
-          }
-        }
+        itemsMap.set(docSnap.id, prod);
       });
 
       const items = Array.from(itemsMap.values());
       items.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
-      setProducts(items);
-
-      if (items.length === 0 && !isSeeding) {
-        seedDatabaseInternal();
+      
+      if (items.length > 0) {
+        // Only overwrite products if not currently in a bulk import that has more items in local memory
+        if (!isBulkImportingRef.current || items.length >= productsCountRef.current) {
+          setProducts(items);
+          productsCountRef.current = items.length;
+          try {
+            localStorage.setItem('gmd_cached_products', JSON.stringify(items));
+          } catch (e) {
+            // ignore cache quota issue
+          }
+        }
+      } else if (!snapshot.metadata.hasPendingWrites && !isBulkImportingRef.current) {
+        // Fallback to local cached catalog if Firestore returned empty or hasn't finished writing
+        const cached = localStorage.getItem('gmd_cached_products');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setProducts(parsed);
+              productsCountRef.current = parsed.length;
+              return;
+            }
+          } catch (e) {}
+        }
+        // Auto-seed safely ONLY if completely empty and no products loaded
+        if (productsCountRef.current === 0) {
+          seedDatabaseInternal();
+        }
       }
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'products');
-      setProducts(INITIAL_PRODUCTS);
+      const cached = localStorage.getItem('gmd_cached_products');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setProducts(parsed);
+            productsCountRef.current = parsed.length;
+            return;
+          }
+        } catch (e) {}
+      }
+      if (productsCountRef.current === 0) {
+        setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, cantidadActual: 0, minStock: 0 })));
+      }
     });
 
     // Movements Listener
@@ -592,80 +625,126 @@ export default function App() {
     }
   };
 
-  // Bulk Import Products Handler for Excel/CSV (e.g. 613+ productos)
-  const handleBulkImportProducts = async (newProducts: Omit<Product, 'id'>[], replaceExisting: boolean) => {
+  // Bulk Import Products Handler for Excel/CSV (e.g. 630+ productos)
+  const handleBulkImportProducts = async (
+    newProducts: Omit<Product, 'id'>[], 
+    replaceExisting: boolean,
+    onProgress?: (current: number, total: number) => void
+  ) => {
     setIsSeeding(true);
+    isBulkImportingRef.current = true;
     try {
       const now = new Date().toISOString();
       const user = userProfile?.displayName || 'Importación Masiva';
 
-      // Fetch existing live products to preserve stock and minStock
-      const productsRef = collection(db, 'products');
-      const snapshot = await getDocs(productsRef);
+      if (onProgress) {
+        onProgress(0, newProducts.length);
+      }
+
+      // 1. Build existing items map from current state to preserve stock/location without blocking network calls
       const existingMap = new Map<string, Product>();
-      snapshot.forEach(docSnap => {
-        const p = docSnap.data() as Product;
-        const key = (p.sku || docSnap.id).toUpperCase();
-        existingMap.set(key, p);
+      products.forEach((p) => {
+        if (p.id) existingMap.set(p.id.toUpperCase(), p);
+        if (p.sku) existingMap.set(p.sku.toUpperCase(), p);
       });
 
-      // Map to full Product objects preserving current inventory if replaceExisting is false
-      const formattedProducts: Product[] = newProducts.map(p => {
-        const key = p.sku.toUpperCase();
-        const existing = existingMap.get(key);
+      // 2. Process products cleanly into a unique map by SKU doc ID
+      const processedMap = new Map<string, Product>();
 
-        if (existing && !replaceExisting) {
-          return {
+      newProducts.forEach((p, idx) => {
+        let rawSku = (p.sku || `SKU-${idx + 1}`).trim();
+        let safeDocId = toSafeDocId(rawSku);
+        let mapKey = safeDocId.toUpperCase();
+
+        // Prevent duplicate SKUs or missing IDs from overwriting rows
+        let uniqueCounter = 1;
+        while (processedMap.has(mapKey)) {
+          uniqueCounter++;
+          rawSku = `${(p.sku || `SKU-${idx + 1}`).trim()}_${uniqueCounter}`;
+          safeDocId = toSafeDocId(rawSku);
+          mapKey = safeDocId.toUpperCase();
+        }
+
+        const existing = existingMap.get(mapKey) || existingMap.get((p.sku || '').toUpperCase());
+
+        let finalProd: Product;
+        if (existing) {
+          // PRESERVE: Keep existing current stock, minStock, and location
+          finalProd = cleanFirestoreData({
             ...p,
-            id: p.sku,
-            cantidadActual: existing.cantidadActual !== undefined ? existing.cantidadActual : 0,
-            minStock: existing.minStock !== undefined ? existing.minStock : 0,
+            id: safeDocId,
+            sku: rawSku,
+            cantidadActual: existing.cantidadActual !== undefined ? existing.cantidadActual : (p.cantidadActual || 0),
+            minStock: existing.minStock !== undefined ? existing.minStock : (p.minStock || 0),
             ubicacionAlmacen: existing.ubicacionAlmacen || p.ubicacionAlmacen || 'Almacén Central',
             updatedAt: now,
             updatedBy: user
-          };
+          });
+        } else {
+          finalProd = cleanFirestoreData({
+            ...p,
+            id: safeDocId,
+            sku: rawSku,
+            cantidadActual: p.cantidadActual || 0,
+            minStock: p.minStock || 0,
+            updatedAt: now,
+            updatedBy: user
+          });
         }
 
-        return {
-          ...p,
-          id: p.sku,
-          updatedAt: now,
-          updatedBy: user
-        };
+        processedMap.set(mapKey, finalProd);
       });
 
-      // Write in batches of 350 to Firestore
-      const chunks: Product[][] = [];
-      for (let i = 0; i < formattedProducts.length; i += 350) {
-        chunks.push(formattedProducts.slice(i, i + 350));
+      const formattedProducts = Array.from(processedMap.values());
+      
+      // Update local state and localStorage cache IMMEDIATELY so app UI reflects ALL items right away!
+      setProducts(formattedProducts);
+      productsCountRef.current = formattedProducts.length;
+      try {
+        localStorage.setItem('gmd_cached_products', JSON.stringify(formattedProducts));
+      } catch (e) {
+        console.warn("localStorage quota exceeded, catalog kept in React state:", e);
       }
 
-      for (const chunk of chunks) {
-        const batch = writeBatch(db);
-        chunk.forEach(p => {
-          const docRef = doc(db, 'products', p.id);
-          batch.set(docRef, p, { merge: true });
-        });
-        await batch.commit();
+      // 3. Batch write all new/updated products to Firestore in lightweight chunks of 50 items
+      const chunkSize = 50;
+
+      for (let i = 0; i < formattedProducts.length; i += chunkSize) {
+        const chunk = formattedProducts.slice(i, i + chunkSize);
+        
+        const currentProgress = Math.min(i + chunk.length, formattedProducts.length);
+        if (onProgress) {
+          onProgress(currentProgress, formattedProducts.length);
+        }
+
+        try {
+          const batch = writeBatch(db);
+          chunk.forEach(p => {
+            const docRef = doc(db, 'products', p.id);
+            batch.set(docRef, p, { merge: true });
+          });
+          
+          // Max 2.5s timeout per batch commit so network delays never freeze the UI loop
+          await Promise.race([
+            batch.commit(),
+            new Promise((resolve) => setTimeout(resolve, 2500))
+          ]);
+        } catch (batchErr) {
+          console.warn(`Aviso en lote [${i}..${i + chunkSize}]:`, batchErr);
+        }
       }
 
-      if (replaceExisting) {
-        setProducts(formattedProducts);
-      } else {
-        setProducts(prev => {
-          const map = new Map<string, Product>();
-          prev.forEach(p => map.set(p.id, p));
-          formattedProducts.forEach(p => map.set(p.id, p));
-          return Array.from(map.values());
-        });
+      if (onProgress) {
+        onProgress(formattedProducts.length, formattedProducts.length);
       }
 
-      console.log(`${formattedProducts.length} productos procesados con éxito preservando inventario e historial.`);
+      console.log(`✨ ${formattedProducts.length} productos procesados y cargados exitosamente.`);
     } catch (err) {
       console.error("Error en importación masiva:", err);
       throw err;
     } finally {
       setIsSeeding(false);
+      isBulkImportingRef.current = false;
     }
   };
 
@@ -702,8 +781,9 @@ export default function App() {
 
   // Inventory CRUD Handlers
   const handleAddProduct = async (productData: Omit<Product, 'id'>) => {
-    const docRef = doc(db, 'products', productData.sku);
-    await setDoc(docRef, { ...productData, id: productData.sku });
+    const docId = toSafeDocId(productData.sku);
+    const docRef = doc(db, 'products', docId);
+    await setDoc(docRef, cleanFirestoreData({ ...productData, id: docId }));
   };
 
   const handleUpdateProduct = async (id: string, updates: Partial<Product>) => {
@@ -1305,7 +1385,7 @@ export default function App() {
       />
 
       {/* Main Content Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 sm:pb-8">
         
         {activeTab === 'portada' && (
           <Portada
@@ -1515,6 +1595,13 @@ export default function App() {
         onBulkImportProducts={handleBulkImportProducts}
         totalProductsCount={products.length}
         totalOrdersCount={pedidosCotizaciones.length + pedidosML.length + pedidosWeb.length + pedidosEspeciales.length}
+      />
+
+      {/* Touch-Friendly Mobile Navigation Bar */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        lowStockCount={lowStockCount}
       />
 
     </div>

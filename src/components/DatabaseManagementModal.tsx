@@ -21,6 +21,7 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { Product } from '../types';
 import { normalizeRowToProduct } from '../utils/productNormalizer';
+import { fetchAndParseDriveUrl } from '../utils/googleDriveHelper';
 
 interface DatabaseManagementModalProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ interface DatabaseManagementModalProps {
   onRestoreBackup: (backupData: any) => Promise<void>;
   onClearDatabase: () => Promise<void>;
   onSmartUpdateCatalog?: () => Promise<{ updatedCount: number; newCount: number }>;
-  onBulkImportProducts?: (products: Omit<Product, 'id'>[], replaceExisting: boolean) => Promise<void>;
+  onBulkImportProducts?: (products: Omit<Product, 'id'>[], replaceExisting: boolean, onProgress?: (current: number, total: number) => void) => Promise<void>;
   totalProductsCount: number;
   totalOrdersCount: number;
 }
@@ -117,45 +118,81 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
             header: true,
             skipEmptyLines: true,
             complete: async (results) => {
-              const products: Omit<Product, 'id'>[] = [];
-              results.data.forEach((row: any, idx: number) => {
-                const prod = normalizeRowToProduct(row, idx);
-                if (prod) products.push(prod);
-              });
+              try {
+                const products: Omit<Product, 'id'>[] = [];
+                results.data.forEach((row: any, idx: number) => {
+                  const prod = normalizeRowToProduct(row, idx);
+                  if (prod) products.push(prod);
+                });
 
-              if (products.length === 0) {
-                alert('No se detectaron registros válidos en la hoja CSV.');
+                if (products.length === 0) {
+                  alert('No se detectaron registros válidos en la hoja CSV.');
+                  setIsRestoring(false);
+                  setStatusMessage(null);
+                  return;
+                }
+
+                if (onBulkImportProducts) {
+                  await onBulkImportProducts(products, false, (current, total) => {
+                    setStatusMessage(`Guardando en la nube: ${current} de ${total} productos...`);
+                  });
+                  setStatusMessage(`✨ ¡Base de datos actualizada! Se cargaron ${products.length} productos desde CSV.`);
+                  setTimeout(() => {
+                    setStatusMessage(null);
+                    setIsRestoring(false);
+                    onClose();
+                  }, 2500);
+                }
+              } catch (err: any) {
+                console.error(err);
+                alert(`Error al guardar productos CSV: ${err?.message || 'Error desconocido'}`);
                 setIsRestoring(false);
                 setStatusMessage(null);
-                return;
-              }
-
-              if (onBulkImportProducts) {
-                await onBulkImportProducts(products, false);
-                setStatusMessage(`✨ ¡Base de datos actualizada! Se cargaron/actualizaron ${products.length} productos desde Excel sin borrar existencias.`);
-                setTimeout(() => {
-                  setStatusMessage(null);
-                  setIsRestoring(false);
-                  onClose();
-                }, 3000);
               }
             }
           });
         } else {
-          // XLSX / XLS
+          // XLSX / XLS - Modern ArrayBuffer reading + Multi-sheet parsing
           const reader = new FileReader();
+          reader.onerror = () => {
+            alert('Error al leer el archivo Excel.');
+            setIsRestoring(false);
+            setStatusMessage(null);
+          };
           reader.onload = async (evt) => {
             try {
-              const bstr = evt.target?.result;
-              const wb = XLSX.read(bstr, { type: 'binary' });
-              const wsName = wb.SheetNames[0];
-              const ws = wb.Sheets[wsName];
-              const jsonData = XLSX.utils.sheet_to_json<any>(ws);
+              const buffer = evt.target?.result as ArrayBuffer;
+              const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+              
+              let products: Omit<Product, 'id'>[] = [];
+              let globalIdx = 0;
 
-              const products: Omit<Product, 'id'>[] = [];
-              jsonData.forEach((row: any, idx: number) => {
-                const prod = normalizeRowToProduct(row, idx);
-                if (prod) products.push(prod);
+              wb.SheetNames.forEach(wsName => {
+                const ws = wb.Sheets[wsName];
+                if (!ws) return;
+
+                // 1. Object mode parsing
+                const jsonData = XLSX.utils.sheet_to_json<any>(ws, { defval: '', raw: false });
+                const objProducts: Omit<Product, 'id'>[] = [];
+                jsonData.forEach((row: any) => {
+                  if (!row || typeof row !== 'object') return;
+                  const prod = normalizeRowToProduct(row, globalIdx++);
+                  if (prod) objProducts.push(prod);
+                });
+
+                // 2. Matrix positional parsing (bypasses title blocks / merged headers)
+                const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '', raw: false });
+                const matrixProducts: Omit<Product, 'id'>[] = [];
+                for (const row of rawMatrix) {
+                  if (!Array.isArray(row) || row.length === 0) continue;
+                  if (row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) continue;
+                  const prod = normalizeRowToProduct(row, globalIdx++);
+                  if (prod) matrixProducts.push(prod);
+                }
+
+                // Choose whichever extraction mode captured MORE items to prevent losing products
+                const bestProducts = matrixProducts.length >= objProducts.length ? matrixProducts : objProducts;
+                products.push(...bestProducts);
               });
 
               if (products.length === 0) {
@@ -165,14 +202,18 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
                 return;
               }
 
+              setStatusMessage(`Analizados ${products.length} productos. Guardando en la nube...`);
+
               if (onBulkImportProducts) {
-                await onBulkImportProducts(products, false);
-                setStatusMessage(`✨ ¡Base de datos actualizada! Se procesaron ${products.length} productos desde ${file.name} preservando existencias e historial.`);
+                await onBulkImportProducts(products, false, (current, total) => {
+                  setStatusMessage(`Guardando en la nube: ${current} de ${total} productos...`);
+                });
+                setStatusMessage(`✨ ¡Base de datos actualizada! Se procesaron los ${products.length} productos de ${file.name} exitosamente.`);
                 setTimeout(() => {
                   setStatusMessage(null);
                   setIsRestoring(false);
                   onClose();
-                }, 3000);
+                }, 2500);
               }
             } catch (err: any) {
               console.error(err);
@@ -181,13 +222,15 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
               setStatusMessage(null);
             }
           };
-          reader.readAsBinaryString(file);
+          reader.readAsArrayBuffer(file);
         }
       } catch (err: any) {
         console.error(err);
         alert(`Error al procesar el archivo: ${err?.message}`);
         setIsRestoring(false);
         setStatusMessage(null);
+      } finally {
+        e.target.value = '';
       }
     } else {
       // JSON backup file
@@ -222,35 +265,32 @@ export const DatabaseManagementModal: React.FC<DatabaseManagementModalProps> = (
     if (!driveUrlInput.trim()) return;
 
     setIsRestoring(true);
-    setStatusMessage('Conectando con Google Drive y descargando respaldo...');
+    setStatusMessage('Conectando con Google Drive y descargando hoja o archivo...');
 
     try {
-      // Extract Google Drive ID if full URL
-      let fetchUrl = driveUrlInput.trim();
-      const driveIdMatch = fetchUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (driveIdMatch && driveIdMatch[1]) {
-        fetchUrl = `https://drive.google.com/uc?export=download&id=${driveIdMatch[1]}`;
+      const result = await fetchAndParseDriveUrl(driveUrlInput.trim());
+
+      if (result.type === 'catalog' && result.products && result.products.length > 0) {
+        if (onBulkImportProducts) {
+          await onBulkImportProducts(result.products, false);
+          setStatusMessage(`✨ ¡Base de datos actualizada! Se procesaron ${result.products.length} productos desde Google Drive preservando existencias e historial.`);
+        }
+      } else if (result.type === 'json' && result.backupData) {
+        await onRestoreBackup(result.backupData);
+        setStatusMessage('✨ ¡Base de datos restaurada correctamente desde respaldo JSON en Google Drive!');
       }
 
-      const response = await fetch(fetchUrl);
-      if (!response.ok) {
-        throw new Error('No se pudo acceder al archivo en Google Drive. Verifique que el enlace sea público (cualquiera con el enlace).');
-      }
-
-      const jsonData = await response.json();
-      await onRestoreBackup(jsonData);
-
-      setStatusMessage('✨ ¡Base de datos cargada exitosamente desde Google Drive!');
       setTimeout(() => {
         setStatusMessage(null);
         setShowDriveLoader(false);
+        setDriveUrlInput('');
+        setIsRestoring(false);
         onClose();
-      }, 2500);
+      }, 3000);
     } catch (err: any) {
       console.error(err);
-      alert(`⚠️ Error al cargar desde Google Drive:\n${err?.message || 'Verifique que el enlace tenga permisos de lectura abiertos.'}`);
+      alert(`⚠️ Error al vincular hoja o archivo de Google Drive:\n\n${err?.message || 'Verifique que el enlace esté en modo público ("Cualquier persona con el enlace puede ver").'}`);
       setStatusMessage(null);
-    } finally {
       setIsRestoring(false);
     }
   };

@@ -230,7 +230,7 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
                   placeholder="Escriba SKU para auto-seleccionar o busque por nombre..."
                   value={searchQuery}
                   onChange={(e) => handleSearchQueryChange(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
@@ -398,7 +398,8 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
             )}
           </div>
 
-          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+          {/* DESKTOP TABLE VIEW */}
+          <div className="hidden md:block overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold sticky top-0">
                 <tr>
@@ -416,12 +417,13 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
                   <th className="py-2.5 px-3">Stock Restante</th>
                   <th className="py-2.5 px-3">Proyecto / Referencia</th>
                   <th className="py-2.5 px-3">Usuario</th>
+                  <th className="py-2.5 px-3 text-center">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {stockOutMovements.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-10 text-slate-400">
+                    <td colSpan={8} className="text-center py-10 text-slate-400">
                       No hay salidas de almacén registradas recientemente.
                     </td>
                   </tr>
@@ -456,12 +458,79 @@ export const StockOutView: React.FC<StockOutViewProps> = ({
                         <td className="py-2.5 px-3 text-slate-500 text-[11px] truncate max-w-[120px]">
                           {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}
                         </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {onDeleteMovements && (
+                            <button
+                              onClick={async () => {
+                                if (confirm(`¿Eliminar este registro de salida de ${m.sku}?`)) {
+                                  await onDeleteMovements([m.id]);
+                                }
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
+                              title="Eliminar salida"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* MOBILE CARDS VIEW */}
+          <div className="block md:hidden space-y-3">
+            {stockOutMovements.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-xs font-bold">
+                No hay salidas registradas.
+              </div>
+            ) : (
+              stockOutMovements.map((m) => {
+                const isSelected = selectedMovementIds.includes(m.id);
+                return (
+                  <div key={m.id} className={`p-3.5 rounded-xl border space-y-2 text-xs ${isSelected ? 'bg-amber-100/80 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelect(m.id)}
+                          className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                        />
+                        <span className="font-black text-slate-900 text-sm">{m.sku}</span>
+                      </div>
+                      <span className="font-extrabold text-amber-600 text-sm">-{m.cantidad}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1 text-slate-700 text-[11px]">
+                      <div><span className="font-bold text-slate-500">Stock Restante:</span> {m.stockNuevo}</div>
+                      <div><span className="font-bold text-slate-500">Fecha:</span> {new Date(m.timestamp).toLocaleDateString('es-MX')}</div>
+                      <div className="col-span-2"><span className="font-bold text-slate-500">Ref:</span> {m.referencia}</div>
+                      <div className="col-span-2"><span className="font-bold text-slate-500">Usuario:</span> {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}</div>
+                    </div>
+
+                    {onDeleteMovements && (
+                      <div className="flex justify-end pt-1 border-t border-slate-200">
+                        <button
+                          onClick={async () => {
+                            if (confirm(`¿Eliminar salida de ${m.sku}?`)) {
+                              await onDeleteMovements([m.id]);
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-red-600 rounded flex items-center space-x-1 font-bold text-[10px]"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

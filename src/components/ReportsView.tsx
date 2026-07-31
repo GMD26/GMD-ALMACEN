@@ -262,7 +262,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
       {/* Movements Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -332,6 +333,46 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredMovements.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No hay movimientos registrados.
+            </div>
+          ) : (
+            filteredMovements.map((m, idx) => {
+              const isEntrada = m.tipo === 'ENTRADA';
+              return (
+                <div key={`${m.id}-${idx}`} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                        isEntrada ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {m.tipo}
+                      </span>
+                      <span className="font-black text-slate-900 text-sm">{m.sku}</span>
+                    </div>
+                    <span className={`font-extrabold text-sm ${isEntrada ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {isEntrada ? '+' : '-'}{m.cantidad}
+                    </span>
+                  </div>
+
+                  <div className="text-slate-800 font-bold leading-snug">{m.descripcion}</div>
+
+                  <div className="grid grid-cols-2 gap-1 text-slate-700 text-[11px]">
+                    <div><span className="font-bold text-slate-500">Stock:</span> {m.stockAnterior} → <strong>{m.stockNuevo}</strong></div>
+                    <div><span className="font-bold text-slate-500">Fecha:</span> {new Date(m.timestamp).toLocaleDateString('es-MX')}</div>
+                    <div className="col-span-2"><span className="font-bold text-slate-500">Ref:</span> {m.referencia}</div>
+                    <div><span className="font-bold text-slate-500">Ubicación:</span> {m.ubicacion}</div>
+                    <div><span className="font-bold text-slate-500">Usuario:</span> {m.usuarioNombre || m.usuarioEmail?.split('@')[0]}</div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

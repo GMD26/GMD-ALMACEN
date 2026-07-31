@@ -290,7 +290,8 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
 
       {/* Main ML Pedidos Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -309,7 +310,7 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                  <td colSpan={10} className="text-center py-12 text-slate-400">
                     No hay pedidos de Mercado Libre registrados en este filtro.
                   </td>
                 </tr>
@@ -462,6 +463,121 @@ export const PedidosMercadoLibreView: React.FC<PedidosMercadoLibreViewProps> = (
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredPedidos.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No hay pedidos de Mercado Libre en este filtro.
+            </div>
+          ) : (
+            filteredPedidos.map((p) => (
+              <div 
+                key={p.id} 
+                className={`p-4 rounded-xl border space-y-3 ${
+                  p.cancelado 
+                    ? 'bg-red-50/30 border-red-200 opacity-75' 
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                  <span className={`font-black text-sm ${p.cancelado ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                    {p.numPedidoML}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-slate-500">
+                    {new Date(p.fecha).toLocaleDateString('es-MX')}
+                  </span>
+                </div>
+
+                <div className="text-xs space-y-1">
+                  <div className="font-extrabold text-slate-800">
+                    Cliente: <span className="font-bold text-slate-600">{p.clienteML}</span>
+                  </div>
+                  <div>
+                    {p.sku && (
+                      <span className="inline-block px-1.5 py-0.5 bg-slate-200 text-slate-800 font-mono font-bold text-[10px] rounded mr-1">
+                        {p.sku}
+                      </span>
+                    )}
+                    <span className="font-semibold text-slate-800">{p.descripcionProducto}</span>
+                  </div>
+                  <div className="font-black text-amber-900 text-xs">
+                    Cantidad: {p.cantidad}
+                  </div>
+                </div>
+
+                {/* Status Toggle Grid for Mobile */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => {
+                      if (!onDescontarAlmacenGMD) return;
+                      if (p.salidaAlmacenGMD) {
+                        if (confirm(`¿Revertir salida para ${p.numPedidoML}?`)) onDescontarAlmacenGMD(p, true);
+                      } else {
+                        onDescontarAlmacenGMD(p, false);
+                      }
+                    }}
+                    disabled={p.cancelado}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center space-x-1 ${
+                      p.salidaAlmacenGMD ? 'bg-cyan-700 text-white' : 'bg-white border border-cyan-300 text-cyan-800'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    <span>{p.salidaAlmacenGMD ? 'Salida GMD OK' : 'Salida GMD'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => onToggleCampoML(p.id, 'pedidoAKronaline', !p.pedidoAKronaline)}
+                    disabled={p.cancelado}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center space-x-1 ${
+                      p.pedidoAKronaline ? 'bg-amber-600 text-white' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    <span>{p.pedidoAKronaline ? 'Kronaline OK' : 'Kronaline'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => onToggleCampoML(p.id, 'entregado', !p.entregado)}
+                    disabled={p.cancelado}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center space-x-1 ${
+                      p.entregado ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    <span>{p.entregado ? 'Entregado' : 'Por Entregar'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => onToggleCampoML(p.id, 'facturado', !p.facturado)}
+                    disabled={p.cancelado}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center space-x-1 ${
+                      p.facturado ? 'bg-purple-600 text-white' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    <span>{p.facturado ? 'Facturado' : 'Sin Facturar'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    onClick={() => onToggleCampoML(p.id, 'cancelado', !p.cancelado)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                      p.cancelado ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {p.cancelado ? 'CANCELADO' : 'Marcar Cancelado'}
+                  </button>
+
+                  <button
+                    onClick={() => onDeletePedidoML(p.id)}
+                    className="p-2 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

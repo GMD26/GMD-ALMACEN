@@ -449,7 +449,8 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
 
       {/* Table of Web Orders */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -597,12 +598,131 @@ export const PedidosWebView: React.FC<PedidosWebViewProps> = ({
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
-
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredPedidos.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No hay pedidos web registrados en este filtro.
+            </div>
+          ) : (
+            filteredPedidos.map((pedido) => (
+              <div 
+                key={pedido.id} 
+                className={`p-4 rounded-xl border space-y-3 ${
+                  pedido.cancelado 
+                    ? 'bg-red-50/30 border-red-200 opacity-75' 
+                    : pedido.completado 
+                    ? 'bg-emerald-50/30 border-emerald-200' 
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className={`font-black text-sm ${pedido.cancelado ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                    {pedido.numPedido}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-slate-500">
+                    {pedido.fechaPedido}
+                  </span>
+                </div>
+
+                <div className="text-xs space-y-1">
+                  <div className="font-extrabold text-blue-800">
+                    {pedido.sku}
+                  </div>
+                  <div className="font-black text-slate-900">
+                    Cantidad: <span className="text-blue-900">{pedido.cantidad}</span>
+                  </div>
+                  <div className="text-slate-600 bg-white p-2 rounded-lg border border-slate-200 text-[11px] leading-tight">
+                    <span className="font-bold text-slate-800 block text-[10px] uppercase">Dirección:</span>
+                    {pedido.direccionEnvio}
+                  </div>
+                  {pedido.notas && (
+                    <div className="text-[10px] text-slate-500 italic">
+                      "{pedido.notas}"
+                    </div>
+                  )}
+                </div>
+
+                {/* Status buttons on mobile */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { recibido: !pedido.recibido })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.recibido ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.recibido ? '✓ Recibido' : 'Pendiente Recibir'}
+                  </button>
+
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { pedidoKronaline: !pedido.pedidoKronaline })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.pedidoKronaline ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.pedidoKronaline ? '✓ Kronaline OK' : 'Pedir Kronaline'}
+                  </button>
+
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { guiaGenerada: !pedido.guiaGenerada })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.guiaGenerada ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.guiaGenerada ? '✓ Guía Lista' : 'Generar Guía'}
+                  </button>
+
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { facturado: !pedido.facturado })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.facturado ? 'bg-purple-600 text-white' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.facturado ? '✓ Facturado' : 'Sin Facturar'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { completado: !pedido.completado })}
+                    disabled={pedido.cancelado}
+                    className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                      pedido.completado ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {pedido.completado ? '✓ Completado' : 'Marcar Completado'}
+                  </button>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => onUpdatePedido(pedido.id, { cancelado: !pedido.cancelado })}
+                      className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold ${
+                        pedido.cancelado ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {pedido.cancelado ? 'CANCELADO' : 'Cancelar'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`¿Eliminar ${pedido.numPedido}?`)) onDeletePedido(pedido.id);
+                      }}
+                      className="p-2 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

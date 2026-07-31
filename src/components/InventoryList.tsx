@@ -279,7 +279,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({
 
       {/* Products Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[11px] font-bold">
               <tr>
@@ -398,6 +399,84 @@ export const InventoryList: React.FC<InventoryListProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredProducts.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No se encontraron productos que coincidan con la búsqueda.
+            </div>
+          ) : (
+            filteredProducts.map((p, idx) => {
+              const isOutOfStock = p.cantidadActual === 0;
+              const isLowStock = p.cantidadActual <= p.minStock && !isOutOfStock;
+
+              return (
+                <div key={`${p.id || p.sku}-${idx}`} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div>
+                      <span className="font-black text-slate-900 text-sm block">{p.sku}</span>
+                      <span className="text-[10px] text-slate-500 font-bold">{p.categoria}</span>
+                    </div>
+                    <span className={`text-sm font-extrabold px-2.5 py-1 rounded-lg border ${
+                      isOutOfStock
+                        ? 'bg-red-100 text-red-800 border-red-300'
+                        : isLowStock
+                        ? 'bg-amber-100 text-amber-800 border-amber-300'
+                        : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    }`}>
+                      Stock: {p.cantidadActual}
+                    </span>
+                  </div>
+
+                  <div className="text-xs space-y-1">
+                    <div className="font-extrabold text-slate-900 leading-snug">{p.descripcion}</div>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                        {p.medida} ({p.unidad})
+                      </span>
+                      <span className="flex items-center space-x-1 text-slate-600 text-[10px] font-bold">
+                        <MapPin className="w-3 h-3 text-cyan-600" />
+                        <span>{p.ubicacionAlmacen}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 text-slate-700">
+                      <span>Min. Stock: <strong>{p.minStock}</strong></span>
+                      <span>Costo Est: <strong>${(p.costo || p.precio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => onOpenQuickStockIn(p)}
+                        className="min-h-[44px] px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center space-x-1"
+                      >
+                        <ArrowDownToLine className="w-4 h-4" />
+                        <span>Entrada</span>
+                      </button>
+
+                      <button
+                        onClick={() => onOpenQuickStockOut(p)}
+                        className="min-h-[44px] px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs flex items-center space-x-1"
+                      >
+                        <ArrowUpFromLine className="w-4 h-4" />
+                        <span>Salida</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setEditingProduct(p)}
+                      className="p-2 text-slate-600 hover:bg-slate-200 rounded-lg border border-slate-300 cursor-pointer"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

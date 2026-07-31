@@ -297,7 +297,8 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
 
       {/* Table of Orders */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -529,6 +530,107 @@ export const PedidosCotizacionesView: React.FC<PedidosCotizacionesViewProps> = (
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredPedidos.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No hay pedidos registrados para {responsable} en este estatus.
+            </div>
+          ) : (
+            filteredPedidos.map((pedido) => (
+              <div 
+                key={pedido.id}
+                className={`p-4 rounded-xl border space-y-3 ${
+                  pedido.pedidoCompletado 
+                    ? 'bg-emerald-50/30 border-emerald-200' 
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className="font-black text-slate-900 text-sm">
+                    {pedido.folioCotizacion}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-slate-500">
+                    {new Date(pedido.fecha).toLocaleDateString('es-MX')}
+                  </span>
+                </div>
+
+                <div className="text-xs space-y-1">
+                  <div className="font-black text-slate-900">
+                    Cliente: <span className="font-extrabold text-indigo-900">{pedido.cliente}</span>
+                  </div>
+                  <div className="text-slate-700 bg-white p-2 rounded-lg border border-slate-200 text-xs leading-relaxed">
+                    <span className="font-bold text-slate-500 block text-[10px] uppercase">Resumen:</span>
+                    {pedido.resumen}
+                  </div>
+                  <div className="font-black text-slate-900 text-sm text-right pt-1">
+                    Total: ${pedido.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                {/* Status Toggles on Mobile */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { pagado: !pedido.pagado })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.pagado ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.pagado ? '✓ Pagado' : 'Pendiente Pago'}
+                  </button>
+
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { pendientePorPedir: !pedido.pendientePorPedir })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.pendientePorPedir ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}
+                  >
+                    {pedido.pendientePorPedir ? 'Por pedir' : 'Solicitado'}
+                  </button>
+
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { guiaGenerada: !pedido.guiaGenerada })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.guiaGenerada ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.guiaGenerada ? '✓ Guía Lista' : 'Sin Guía'}
+                  </button>
+
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { facturado: !pedido.facturado })}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-xs font-bold ${
+                      pedido.facturado ? 'bg-purple-600 text-white' : 'bg-white border border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {pedido.facturado ? '✓ Facturado' : 'Sin Facturar'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => onUpdatePedido(pedido.id, { pedidoCompletado: !pedido.pedidoCompletado })}
+                    className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                      pedido.pedidoCompletado ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {pedido.pedidoCompletado ? '✓ Completado' : 'Marcar Completado'}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`¿Eliminar ${pedido.folioCotizacion}?`)) onDeletePedido(pedido.id);
+                    }}
+                    className="p-2 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

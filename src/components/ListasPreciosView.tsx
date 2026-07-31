@@ -282,30 +282,6 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* View Mode Toggle (Mobile / Matrix) */}
-          <div className="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700 shrink-0">
-            <button
-              onClick={() => setViewMode('matrix')}
-              className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'matrix' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Vista de Tabla Matriz Completa"
-            >
-              <Table className="w-4 h-4" />
-              <span className="hidden sm:inline">Tabla Matriz</span>
-            </button>
-            <button
-              onClick={() => setViewMode('cards')}
-              className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'cards' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Vista Móvil de Tarjetas Táctiles"
-            >
-              <Grid className="w-4 h-4" />
-              <span>Vista Móvil</span>
-            </button>
-          </div>
-
           {/* Confirm Save */}
           <button
             onClick={handleConfirmSave}
@@ -422,148 +398,209 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
         </div>
       </div>
 
-      {/* Quick Search & SKU Chips */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-          <div className="relative w-full sm:w-96 flex items-center">
-            <Search className="w-4 h-4 absolute left-3 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Buscar por código, descripción, medida o unidad..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-9 py-2.5 min-h-[44px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-black uppercase text-slate-500 mr-1">Filtro SKU:</span>
-            {[
-              { label: 'Todos', code: '' },
-              { label: 'PA', code: 'PA' },
-              { label: 'PH', code: 'PH' },
-              { label: 'BP', code: 'BP' },
-              { label: 'DTF', code: 'DTF' },
-              { label: 'GV', code: 'GV' },
-              { label: 'CV', code: 'CV' },
-              { label: 'ART', code: 'ART' },
-              { label: 'KE', code: 'KE' }
-            ].map(chip => (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() => setSearchTerm(chip.code)}
-                className={`px-2.5 py-1 min-h-[36px] rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                  searchTerm === chip.code && chip.code !== ''
-                    ? 'bg-cyan-600 text-white border-cyan-500'
-                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-cyan-50'
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
+      {/* Quick Search */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="relative w-full flex items-center">
+          <Search className="w-4 h-4 absolute left-3 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar por código, descripción, medida o unidad..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-9 py-2.5 min-h-[44px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* MATRIX VIEW (11 COLUMNS) */}
-      {viewMode === 'matrix' && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap min-w-[1200px]">
-              <thead className="bg-slate-900 text-slate-200 uppercase text-[10px] font-extrabold sticky top-0 z-10">
+      {/* MOBILE RESPONSIVE CARDS (SHOW ON MOBILE < md) */}
+      <div className="block md:hidden space-y-3">
+        {filteredRows.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl text-center text-slate-400 font-bold border border-slate-200 dark:border-slate-800">
+            No hay productos coincidentes.
+          </div>
+        ) : (
+          filteredRows.map((row, idx) => {
+            const isExpanded = expandedCardId === row.id;
+            return (
+              <div 
+                key={row.id || idx}
+                className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                  <span className="px-3 py-1 bg-cyan-900 text-cyan-200 rounded-xl text-xs font-black tracking-wide">
+                    {row.codigo}
+                  </span>
+                  <div className="text-right">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                      {row.medida}
+                    </span>
+                    <span className="text-[10px] font-black uppercase text-cyan-600 dark:text-cyan-400">
+                      {row.unidad}
+                    </span>
+                  </div>
+                </div>
+
+                <h3 className="text-xs font-black text-slate-900 dark:text-white leading-relaxed">
+                  {row.descripcion}
+                </h3>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="bg-cyan-50 dark:bg-cyan-950/40 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800/40">
+                    <div className="text-[10px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300">
+                      Precio Base
+                    </div>
+                    <div className="text-sm font-black text-cyan-950 dark:text-cyan-200">
+                      ${formatPrecio(row.precio)}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 dark:bg-blue-950/40 p-2.5 rounded-xl border border-blue-200 dark:border-blue-800/40">
+                    <div className="text-[10px] font-extrabold uppercase text-blue-800 dark:text-blue-300">
+                      Precio + IVA
+                    </div>
+                    <div className="text-sm font-black text-blue-950 dark:text-blue-200">
+                      ${formatPrecio(row.precioIva)}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setExpandedCardId(isExpanded ? null : row.id)}
+                  className="w-full min-h-[44px] py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold text-xs rounded-xl flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                >
+                  <span>{isExpanded ? 'Ocultar Desglose' : 'Ver 7 Categorías de Precio'}</span>
+                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {isExpanded && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs animate-fadeIn">
+                    <div className="bg-emerald-50 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800/30">
+                      <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300 block">Precio Descuento</span>
+                      <span className="font-black text-emerald-950 dark:text-emerald-200">${formatPrecio(row.precioDescuento)}</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 block">Factor 1.14</span>
+                      <span className="font-bold text-slate-900 dark:text-white">${formatPrecio(row.precio114)}</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 block">Factor 1.16</span>
+                      <span className="font-bold text-slate-900 dark:text-white">${formatPrecio(row.precio116)}</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 block">Factor 1.2798</span>
+                      <span className="font-bold text-slate-900 dark:text-white">${formatPrecio(row.precio12798)}</span>
+                    </div>
+
+                    <div className="col-span-2 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200 dark:border-amber-800/30 flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase text-amber-800 dark:text-amber-300">COSTO</span>
+                      <span className="font-black text-amber-950 dark:text-amber-200">${formatPrecio(row.costo)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* MATRIX VIEW (11 COLUMNS WITH SMOOTH SCROLL & STICKY COLUMN) */}
+      <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs whitespace-nowrap min-w-[1100px]">
+            <thead className="bg-slate-900 text-slate-200 uppercase text-[10px] font-extrabold sticky top-0 z-10">
+              <tr>
+                <th className="py-3.5 px-3 bg-slate-900 text-cyan-400 sticky left-0 z-20 shadow-md">Código</th>
+                <th className="py-3.5 px-4 min-w-[280px]">Descripción</th>
+                <th className="py-3.5 px-3 text-center">Medida</th>
+                <th className="py-3.5 px-3 text-center">Unidad</th>
+                <th className="py-3.5 px-3 text-right bg-cyan-950/80 text-cyan-300 border-l border-cyan-800/40">Precio</th>
+                <th className="py-3.5 px-3 text-right bg-blue-950/80 text-blue-300">Precio + IVA</th>
+                <th className="py-3.5 px-3 text-right bg-emerald-950/80 text-emerald-300">Precio Desc</th>
+                <th className="py-3.5 px-3 text-right bg-slate-800/90 text-purple-300">1.14</th>
+                <th className="py-3.5 px-3 text-right bg-slate-800/90 text-purple-300">1.16</th>
+                <th className="py-3.5 px-3 text-right bg-slate-800/90 text-purple-300">1.2798</th>
+                <th className="py-3.5 px-3 text-right bg-amber-950/80 text-amber-300 border-r border-amber-800/40">COSTO</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
+              {filteredRows.length === 0 ? (
                 <tr>
-                  <th className="py-3.5 px-3 bg-slate-900 text-cyan-400 sticky left-0 z-20 shadow-md">Código</th>
-                  <th className="py-3.5 px-4 min-w-[280px]">Descripción</th>
-                  <th className="py-3.5 px-3 text-center">Medida</th>
-                  <th className="py-3.5 px-3 text-center">Unidad</th>
-                  <th className="py-3.5 px-3 text-right bg-cyan-950/80 text-cyan-300 border-l border-cyan-800/40">Precio</th>
-                  <th className="py-3.5 px-3 text-right bg-blue-950/80 text-blue-300">Precio + IVA</th>
-                  <th className="py-3.5 px-3 text-right bg-emerald-950/80 text-emerald-300">Precio Desc</th>
-                  <th className="py-3.5 px-3 text-right bg-slate-800/90 text-purple-300">1.14</th>
-                  <th className="py-3.5 px-3 text-right bg-slate-800/90 text-purple-300">1.16</th>
-                  <th className="py-3.5 px-3 text-right bg-slate-800/90 text-purple-300">1.2798</th>
-                  <th className="py-3.5 px-3 text-right bg-amber-950/80 text-amber-300 border-r border-amber-800/40">COSTO</th>
+                  <td colSpan={11} className="text-center py-12 text-slate-400">
+                    No se encontraron productos en la lista de precios. Realice una búsqueda o presione "Sincronizar".
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-                {filteredRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className="text-center py-12 text-slate-400">
-                      No se encontraron productos en la lista de precios. Realice una búsqueda o presione "Sincronizar".
+              ) : (
+                filteredRows.map((row, idx) => (
+                  <tr key={row.id || idx} className="hover:bg-cyan-50/40 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 px-3 font-black text-cyan-700 dark:text-cyan-400 sticky left-0 z-10 bg-white dark:bg-slate-900 shadow-sm border-r border-slate-100 dark:border-slate-800">
+                      {row.codigo}
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white max-w-[320px] truncate" title={row.descripcion}>
+                      {row.descripcion}
+                    </td>
+                    <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                      {row.medida}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-black text-[10px]">
+                        {row.unidad}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right font-black text-cyan-900 dark:text-cyan-300 bg-cyan-50/20 dark:bg-cyan-950/10">
+                      ${formatPrecio(row.precio)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-black text-blue-900 dark:text-blue-300 bg-blue-50/20 dark:bg-blue-950/10">
+                      ${formatPrecio(row.precioIva)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/10">
+                      ${formatPrecio(row.precioDescuento)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-300">
+                      ${formatPrecio(row.precio114)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-300">
+                      ${formatPrecio(row.precio116)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-300">
+                      ${formatPrecio(row.precio12798)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-black text-amber-900 dark:text-amber-400 bg-amber-50/20 dark:bg-amber-950/10">
+                      ${formatPrecio(row.costo)}
                     </td>
                   </tr>
-                ) : (
-                  filteredRows.map((row, idx) => (
-                    <tr key={row.id || idx} className="hover:bg-cyan-50/40 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="py-3 px-3 font-black text-cyan-700 dark:text-cyan-400 sticky left-0 z-10 bg-white dark:bg-slate-900 shadow-sm border-r border-slate-100 dark:border-slate-800">
-                        {row.codigo}
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white max-w-[320px] truncate" title={row.descripcion}>
-                        {row.descripcion}
-                      </td>
-                      <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400 font-mono text-[11px]">
-                        {row.medida}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-black text-[10px]">
-                          {row.unidad}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right font-black text-cyan-900 dark:text-cyan-300 bg-cyan-50/20 dark:bg-cyan-950/10">
-                        ${formatPrecio(row.precio)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-black text-blue-900 dark:text-blue-300 bg-blue-50/20 dark:bg-blue-950/10">
-                        ${formatPrecio(row.precioIva)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/10">
-                        ${formatPrecio(row.precioDescuento)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-300">
-                        ${formatPrecio(row.precio114)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-300">
-                        ${formatPrecio(row.precio116)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-300">
-                        ${formatPrecio(row.precio12798)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-black text-amber-900 dark:text-amber-400 bg-amber-50/20 dark:bg-amber-950/10">
-                        ${formatPrecio(row.costo)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
-      {/* MOBILE CARDS VIEW */}
-      {viewMode === 'cards' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredRows.length === 0 ? (
-            <div className="col-span-full bg-white p-8 rounded-2xl text-center text-slate-400 font-bold border border-slate-200">
-              No hay productos coincidentes.
-            </div>
-          ) : (
-            filteredRows.map((row, idx) => {
-              const isExpanded = expandedCardId === row.id;
-              return (
-                <div 
-                  key={row.id || idx}
-                  className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all space-y-3"
-                >
+      {/* MOBILE RESPONSIVE CARDS (SHOW ON MOBILE < md) */}
+      <div className="block md:hidden space-y-3">
+        {filteredRows.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl text-center text-slate-400 font-bold border border-slate-200 dark:border-slate-800">
+            No hay productos coincidentes.
+          </div>
+        ) : (
+          filteredRows.map((row, idx) => {
+            const isExpanded = expandedCardId === row.id;
+            return (
+              <div 
+                key={row.id || idx}
+                className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all space-y-3"
+              >
                   {/* Card Header */}
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
                     <span className="px-3 py-1 bg-cyan-900 text-cyan-200 rounded-xl text-xs font-black tracking-wide">
@@ -648,7 +685,6 @@ export const ListasPreciosView: React.FC<ListasPreciosViewProps> = ({
             })
           )}
         </div>
-      )}
 
       {/* Modal Agregar Item */}
       {isModalOpen && (

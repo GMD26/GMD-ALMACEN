@@ -125,7 +125,8 @@ export const PedidosEspecialesView: React.FC<PedidosEspecialesViewProps> = ({
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -212,6 +213,87 @@ export const PedidosEspecialesView: React.FC<PedidosEspecialesViewProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredPedidos.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No hay pedidos especiales registrados.
+            </div>
+          ) : (
+            filteredPedidos.map((p) => (
+              <div key={p.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-black text-slate-900 text-sm">
+                      {p.folio || `#PE-${p.id.substring(0, 5)}`}
+                    </span>
+                    <span className="px-2 py-0.5 bg-cyan-100 text-cyan-900 font-extrabold rounded text-[10px]">
+                      {p.nombre}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    {new Date(p.fecha).toLocaleDateString('es-MX')}
+                  </span>
+                </div>
+
+                <div className="text-xs space-y-1">
+                  <div className="font-black text-slate-900">
+                    Cliente: <span className="font-bold text-slate-700">{p.cliente}</span>
+                  </div>
+                  <div className="text-slate-800 bg-white p-2 rounded-lg border border-slate-200 text-xs leading-relaxed">
+                    <span className="font-bold text-slate-500 block text-[10px] uppercase">Detalles:</span>
+                    {p.detalles}
+                  </div>
+                  {p.montoEstimado > 0 && (
+                    <div className="font-black text-slate-900 text-sm text-right pt-1">
+                      Monto Est: ${(p.montoEstimado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    </div>
+                  )}
+                  {p.notas && (
+                    <div className="text-[10px] text-slate-500 italic">
+                      "{p.notas}"
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                  <div className="flex items-center space-x-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Estado:</span>
+                    <select
+                      value={p.estado}
+                      onChange={(e) => {
+                        const handler = onUpdateEstado || onUpdateEstadoPedido;
+                        if (handler) handler(p.id, e.target.value as any);
+                      }}
+                      className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-black border ${
+                        p.estado === 'COMPLETADO'
+                          ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                          : p.estado === 'EN_PROCESO'
+                          ? 'bg-amber-100 border-amber-300 text-amber-800'
+                          : p.estado === 'CANCELADO'
+                          ? 'bg-red-100 border-red-300 text-red-800'
+                          : 'bg-white border border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <option value="PENDIENTE">PENDIENTE</option>
+                      <option value="EN_PROCESO">EN PROCESO</option>
+                      <option value="COMPLETADO">COMPLETADO</option>
+                      <option value="CANCELADO">CANCELADO</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={() => onDeletePedidoEspecial(p.id)}
+                    className="p-2 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

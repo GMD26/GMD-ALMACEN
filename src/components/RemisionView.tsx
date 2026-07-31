@@ -109,14 +109,14 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
   const [items, setItems] = useState<RemisionItem[]>([
     {
       id: '1',
-      sku: 'DTF01',
-      descripcion: 'PELICULA DE IMPRESION DTF 30CM X 100M',
-      medida: '30CM X 100M',
-      unidad: 'ROLLO',
+      sku: 'AL690',
+      descripcion: 'PELÍCULA ACETATO PARA IMPRESORAS Y COPIADORAS LÁSER 4 mil',
+      medida: '.216 x .279 m',
+      unidad: 'PAQ C/100 H',
       peso: '100g',
       cantidad: 1,
-      precioUnitario: 1850,
-      importe: 1850
+      precioUnitario: 896,
+      importe: 896
     }
   ]);
 
@@ -703,35 +703,6 @@ export const RemisionView: React.FC<RemisionViewProps> = ({
                 <span>Renglón Vacío</span>
               </button>
             </div>
-          </div>
-
-          {/* Quick Filter Chips for Kronaline Items in Remision */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 print:hidden">
-            <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 mr-1 flex items-center space-x-1">
-              <Sparkles className="w-3 h-3 text-cyan-500" />
-              <span>Chips de Búsqueda Ágil Kronaline:</span>
-            </span>
-            {[
-              { label: 'PA (Acetatos)', code: 'PA' },
-              { label: 'PH (Fotográfico)', code: 'PH' },
-              { label: 'BP (Bond)', code: 'BP' },
-              { label: 'DTF (Sublimación)', code: 'DTF' },
-              { label: 'GV (Vinil)', code: 'GV' },
-              { label: 'CV (Canvas)', code: 'CV' },
-              { label: 'ART (FineArt)', code: 'ART' },
-              { label: 'KE (K+E)', code: 'KE' }
-            ].map(chip => (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() => {
-                  setIsCatalogModalOpen(true);
-                }}
-                className="px-2.5 py-1 min-h-[38px] bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-cyan-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all cursor-pointer"
-              >
-                {chip.label}
-              </button>
-            ))}
           </div>
 
           <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">

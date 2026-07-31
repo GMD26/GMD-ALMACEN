@@ -21,7 +21,7 @@ import { normalizeRowToProduct } from '../utils/productNormalizer';
 interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBulkImport: (products: Omit<Product, 'id'>[], replaceExisting: boolean) => Promise<void>;
+  onBulkImport: (products: Omit<Product, 'id'>[], replaceExisting: boolean, onProgress?: (current: number, total: number) => void) => Promise<void>;
   existingProductCount: number;
 }
 
@@ -37,8 +37,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
-  const [replaceExisting, setReplaceExisting] = useState(false);
-  const [forceZeroStock, setForceZeroStock] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [replaceExisting, setReplaceExisting] = useState(true);
+  const [forceZeroStock, setForceZeroStock] = useState(false);
 
   if (!isOpen) return null;
 
@@ -67,54 +68,85 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
-          const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary' });
-          const wsName = wb.SheetNames[0];
-          const ws = wb.Sheets[wsName];
-          const jsonData = XLSX.utils.sheet_to_json<any>(ws);
+          const buffer = evt.target?.result as ArrayBuffer;
+          const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+          
+          let products: Omit<Product, 'id'>[] = [];
+          let globalIdx = 0;
 
-          const products: Omit<Product, 'id'>[] = [];
-          const errors: string[] = [];
+          wb.SheetNames.forEach(wsName => {
+            const ws = wb.Sheets[wsName];
+            if (!ws) return;
 
-          jsonData.forEach((row: any, idx: number) => {
-            const prod = processRow(row, idx);
-            if (prod) {
-              products.push(prod);
-            } else {
-              errors.push(`Fila ${idx + 2}: Registro incompleto omitido.`);
+            // 1. Object mode parsing
+            const jsonData = XLSX.utils.sheet_to_json<any>(ws, { defval: '', raw: false });
+            const objProducts: Omit<Product, 'id'>[] = [];
+            jsonData.forEach((row: any) => {
+              if (!row || typeof row !== 'object') return;
+              const prod = processRow(row, globalIdx++);
+              if (prod) objProducts.push(prod);
+            });
+
+            // 2. Matrix positional parsing (bypasses title blocks / merged headers)
+            const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '', raw: false });
+            const matrixProducts: Omit<Product, 'id'>[] = [];
+            for (const row of rawMatrix) {
+              if (!Array.isArray(row) || row.length === 0) continue;
+              if (row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) continue;
+              const prod = processRow(row, globalIdx++);
+              if (prod) matrixProducts.push(prod);
             }
+
+            // Choose whichever extraction mode captured MORE items to prevent losing products
+            const bestProducts = matrixProducts.length >= objProducts.length ? matrixProducts : objProducts;
+            products.push(...bestProducts);
           });
 
           setParsedProducts(products);
-          setParseErrors(errors);
+          if (products.length === 0) {
+            setParseErrors(['No se pudieron detectar productos en la hoja de Excel.']);
+          }
         } catch (err: any) {
           setParseErrors([`Error al procesar la hoja Excel: ${err?.message || 'Formato no reconocido'}`]);
         } finally {
           setIsLoading(false);
         }
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     } else {
-      Papa.parse(file, {
+      Papa.parse(file as any, {
         header: true,
-        skipEmptyLines: true,
+        skipEmptyLines: 'greedy',
         dynamicTyping: false,
         complete: (results) => {
           setIsLoading(false);
-          const products: Omit<Product, 'id'>[] = [];
-          const errors: string[] = [];
+          let products: Omit<Product, 'id'>[] = [];
 
           results.data.forEach((row: any, idx: number) => {
             const prod = processRow(row, idx);
-            if (prod) {
-              products.push(prod);
-            } else {
-              errors.push(`Línea ${idx + 2}: Registro incompleto omitido.`);
-            }
+            if (prod) products.push(prod);
           });
 
-          setParsedProducts(products);
-          setParseErrors(errors);
+          // Matrix fallback
+          if (products.length < 50) {
+            Papa.parse(file as any, {
+              header: false,
+              skipEmptyLines: 'greedy',
+              complete: (rawResults) => {
+                const arrayProducts: Omit<Product, 'id'>[] = [];
+                rawResults.data.forEach((row: any, idx: number) => {
+                  const prod = processRow(row, idx);
+                  if (prod) arrayProducts.push(prod);
+                });
+                if (arrayProducts.length > products.length) {
+                  products = arrayProducts;
+                }
+                setParsedProducts(products);
+              }
+            });
+          } else {
+            setParsedProducts(products);
+          }
         },
         error: (err) => {
           setIsLoading(false);
@@ -179,6 +211,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const handleConfirmImport = async () => {
     if (parsedProducts.length === 0) return;
     setIsLoading(true);
+    setUploadProgress({ current: 0, total: parsedProducts.length });
     try {
       // Re-apply zero stock if checked
       const finalProducts = parsedProducts.map(p => ({
@@ -187,12 +220,16 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         minStock: forceZeroStock ? 0 : p.minStock
       }));
 
-      await onBulkImport(finalProducts, replaceExisting);
+      await onBulkImport(finalProducts, replaceExisting, (current, total) => {
+        setUploadProgress({ current, total });
+      });
       setIsLoading(false);
+      setUploadProgress(null);
       onClose();
     } catch (err) {
       console.error(err);
       setIsLoading(false);
+      setUploadProgress(null);
       alert('Ocurrió un error al importar los productos. Revisa la consola o intenta de nuevo.');
     }
   };
@@ -420,14 +457,23 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         {/* Footer */}
         <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
           <div className="text-xs text-slate-500">
-            {parsedProducts.length > 0 ? `${parsedProducts.length} productos listos para importación masiva.` : 'Esperando archivo o texto para procesar.'}
+            {uploadProgress ? (
+              <span className="text-cyan-600 font-bold animate-pulse">
+                Guardando en la nube: {uploadProgress.current} / {uploadProgress.total} SKUs...
+              </span>
+            ) : parsedProducts.length > 0 ? (
+              `${parsedProducts.length} productos listos para importación masiva.`
+            ) : (
+              'Esperando archivo o texto para procesar.'
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+              disabled={isLoading}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -438,7 +484,13 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               className="flex items-center space-x-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
             >
               <Database className="w-4 h-4" />
-              <span>{isLoading ? 'Guardando...' : `Importar ${parsedProducts.length} Productos`}</span>
+              <span>
+                {uploadProgress
+                  ? `Guardando (${uploadProgress.current}/${uploadProgress.total})...`
+                  : isLoading
+                  ? 'Procesando...'
+                  : `Importar ${parsedProducts.length} Productos`}
+              </span>
             </button>
           </div>
         </div>

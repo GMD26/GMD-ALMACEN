@@ -486,7 +486,8 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
           <span>Historial de Solicitudes de Pedidos Guardadas</span>
         </h2>
 
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -575,6 +576,70 @@ export const LowStockOrders: React.FC<LowStockOrdersProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden space-y-3">
+          {purchaseOrders.length === 0 ? (
+            <div className="text-center py-6 text-slate-400 text-xs font-bold">
+              No hay solicitudes de pedidos guardadas.
+            </div>
+          ) : (
+            purchaseOrders.map((order, idx) => (
+              <div key={`${order.id}-${idx}`} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className="font-black text-slate-900 text-sm">{order.folio}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                    order.estado === 'RECIBIDO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {order.estado}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1 text-slate-700">
+                  <div><span className="font-bold text-slate-500">Fecha:</span> {new Date(order.fecha).toLocaleDateString('es-MX')}</div>
+                  <div><span className="font-bold text-slate-500">Items:</span> {order.items?.length || 0} productos</div>
+                  <div className="col-span-2"><span className="font-bold text-slate-500">Solicitante:</span> {order.solicitante}</div>
+                  <div className="col-span-2"><span className="font-bold text-slate-500">Proveedor:</span> {order.proveedor}</div>
+                </div>
+
+                <div className="font-black text-cyan-900 text-sm text-right pt-1 border-t border-slate-200">
+                  Total Est: ${order.totalEstimado?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-2">
+                  <button
+                    onClick={() => generatePurchaseOrderPDF(order)}
+                    className="p-2 text-slate-600 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 cursor-pointer"
+                    title="Descargar PDF"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+
+                  {order.estado !== 'RECIBIDO' && (
+                    <button
+                      onClick={() => handleReceive(order)}
+                      disabled={receivingOrderId === order.id}
+                      className="min-h-[44px] px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {receivingOrderId === order.id ? 'Recibiendo...' : 'Marcar Recibido'}
+                    </button>
+                  )}
+
+                  {onDeletePurchaseOrder && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`¿Eliminar ${order.folio}?`)) onDeletePurchaseOrder(order.id);
+                      }}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg border border-red-200 cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

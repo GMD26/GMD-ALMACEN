@@ -197,7 +197,8 @@ export const ExistenciasDisponiblesView: React.FC<ExistenciasDisponiblesViewProp
           <span className="text-xs text-slate-500 font-semibold">{filteredProducts.length} productos</span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-bold">
               <tr>
@@ -259,6 +260,61 @@ export const ExistenciasDisponiblesView: React.FC<ExistenciasDisponiblesViewProp
             </tbody>
           </table>
         </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredProducts.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs font-bold">
+              No se encontraron productos en el inventario.
+            </div>
+          ) : (
+            filteredProducts.map((p) => {
+              const hasApartado = p.totalApartado > 0;
+              return (
+                <div key={p.id || p.sku} className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+                    <span className="px-2.5 py-1 bg-slate-900 text-cyan-300 rounded-lg text-xs font-black">
+                      {p.sku}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      {p.medida} / {p.unidad}
+                    </span>
+                  </div>
+
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-snug">
+                    {p.descripcion}
+                  </h3>
+
+                  <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                    <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <span className="text-[9px] font-extrabold uppercase text-slate-500 block">Físico Total</span>
+                      <span className="font-extrabold text-xs text-slate-800 dark:text-slate-200">{p.cantidadActual}</span>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <span className="text-[9px] font-extrabold uppercase text-slate-500 block">Apartado</span>
+                      <span className="font-extrabold text-xs text-amber-700 dark:text-amber-400">{hasApartado ? p.totalApartado : 0}</span>
+                    </div>
+
+                    <div className="bg-cyan-50 dark:bg-cyan-950/40 p-2 rounded-lg border border-cyan-200 dark:border-cyan-800/40">
+                      <span className="text-[9px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300 block">Neto Disp.</span>
+                      <span className="font-black text-xs text-cyan-950 dark:text-cyan-200">{p.disponibleNeto}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenModal(p.sku)}
+                    disabled={p.disponibleNeto === 0}
+                    className="w-full min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 text-cyan-400 font-extrabold text-xs rounded-xl transition-colors disabled:opacity-40 cursor-pointer flex items-center justify-center space-x-1"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Separar Mercancía</span>
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Active Apartados Section */}
@@ -270,7 +326,8 @@ export const ExistenciasDisponiblesView: React.FC<ExistenciasDisponiblesViewProp
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold">
               <tr>
@@ -328,6 +385,64 @@ export const ExistenciasDisponiblesView: React.FC<ExistenciasDisponiblesViewProp
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="block md:hidden space-y-3">
+          {filteredApartados.length === 0 ? (
+            <div className="text-center py-6 text-slate-400 text-xs font-bold">
+              No hay apartados activos en este momento.
+            </div>
+          ) : (
+            filteredApartados.map((a) => (
+              <div key={a.id} className="bg-amber-50/40 p-3.5 rounded-xl border border-amber-200 space-y-2">
+                <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2.5 py-0.5 bg-amber-900 text-amber-100 font-black text-xs rounded-lg">
+                      {a.sku}
+                    </span>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded font-extrabold text-[10px]">
+                      {a.nombre}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    {new Date(a.fecha).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                </div>
+
+                <h3 className="text-xs font-bold text-slate-900 leading-snug">
+                  {a.descripcion}
+                </h3>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <div className="flex items-center space-x-1">
+                    <span className="text-[10px] font-extrabold text-slate-500 uppercase">Cantidad:</span>
+                    <span className="font-black text-amber-900 text-sm">{a.cantidadApartada}</span>
+                  </div>
+                  {a.notas && (
+                    <span className="text-[10px] italic text-slate-600 truncate max-w-[150px]">
+                      "{a.notas}"
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-200/60">
+                  <button
+                    onClick={() => onCompletarApartado ? onCompletarApartado(a.id) : onLiberarApartado(a.id)}
+                    className="w-full min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-colors cursor-pointer flex items-center justify-center"
+                  >
+                    Despachar
+                  </button>
+                  <button
+                    onClick={() => onLiberarApartado(a.id)}
+                    className="w-full min-h-[44px] bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-extrabold transition-colors cursor-pointer flex items-center justify-center"
+                  >
+                    Liberar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
