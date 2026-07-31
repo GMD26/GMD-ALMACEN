@@ -163,7 +163,7 @@ export default function App() {
           }
         }
       } else if (!snapshot.metadata.hasPendingWrites && !isBulkImportingRef.current) {
-        // Fallback to local cached catalog if Firestore returned empty or hasn't finished writing
+        // Fallback to local cached catalog if Firestore returned empty
         const cached = localStorage.getItem('gmd_cached_products');
         if (cached) {
           try {
@@ -174,10 +174,6 @@ export default function App() {
               return;
             }
           } catch (e) {}
-        }
-        // Auto-seed safely ONLY if completely empty and no products loaded
-        if (productsCountRef.current === 0) {
-          seedDatabaseInternal();
         }
       }
     }, (err) => {
@@ -192,9 +188,6 @@ export default function App() {
             return;
           }
         } catch (e) {}
-      }
-      if (productsCountRef.current === 0) {
-        setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, cantidadActual: 0, minStock: 0 })));
       }
     });
 
@@ -706,8 +699,8 @@ export default function App() {
         console.warn("localStorage quota exceeded, catalog kept in React state:", e);
       }
 
-      // 3. Batch write all new/updated products to Firestore in lightweight chunks of 50 items
-      const chunkSize = 50;
+      // 3. Batch write all new/updated products to Firestore in chunks of 150 items
+      const chunkSize = 150;
 
       for (let i = 0; i < formattedProducts.length; i += chunkSize) {
         const chunk = formattedProducts.slice(i, i + chunkSize);
@@ -724,13 +717,11 @@ export default function App() {
             batch.set(docRef, p, { merge: true });
           });
           
-          // Max 2.5s timeout per batch commit so network delays never freeze the UI loop
-          await Promise.race([
-            batch.commit(),
-            new Promise((resolve) => setTimeout(resolve, 2500))
-          ]);
+          await batch.commit();
         } catch (batchErr) {
-          console.warn(`Aviso en lote [${i}..${i + chunkSize}]:`, batchErr);
+          console.warn(`Aviso en lote [${i}..${i + chunkSize}], intentando guardado individual por documento:`, batchErr);
+          // Parallel fallback for max resilience
+          await Promise.allSettled(chunk.map(p => setDoc(doc(db, 'products', p.id), p, { merge: true })));
         }
       }
 
